@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+credentials.json
+service-account*.json
+
+# Runtime data
+data/runtime/
+data/browser-sessions/
+data/evidence/
+*.db
+*.sqlite
+*.sqlite3
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Playwright
+playwright-report/
+test-results/
+
+# Logs
+*.log
+logs/
+
+# Lock of local tool caches
+.uv/
+uv-cache/

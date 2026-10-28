@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "event-off-page-seo": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "/absolute/path/to/event-off-page-seo-automation",
+        "python",
+        "-m",
+        "event_seo_mcp.server"
+      ],
+      "env": {
+        "MCP_TRANSPORT": "stdio",
+        "AI_PROVIDER": "template",
+        "DRY_RUN_DEFAULT": "true",
+        "DATABASE_PATH": "data/runtime/event_seo.db"
+      }
+    }
+  }
+}
