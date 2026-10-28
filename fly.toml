@@ -1,0 +1,43 @@
+# Ready-to-deploy Fly.io config. Requires a Fly account + `fly auth login` (or FLY_API_TOKEN).
+# Deploy:
+#   export MCP_AUTH_TOKEN="$(openssl rand -hex 32)"
+#   fly apps create event-seo-mcp   # once
+#   fly secrets set MCP_AUTH_TOKEN="$MCP_AUTH_TOKEN" DRY_RUN_DEFAULT=true AI_PROVIDER=template
+#   fly deploy
+#   curl https://<app>.fly.dev/healthz
+
+app = "event-seo-mcp"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  MCP_TRANSPORT = "streamable-http"
+  MCP_HTTP_HOST = "0.0.0.0"
+  MCP_HTTP_PORT = "8000"
+  MCP_ALLOW_REMOTE_BIND = "true"
+  DRY_RUN_DEFAULT = "true"
+  REQUIRE_PUBLICATION_AUTHORIZATION = "true"
+  AI_PROVIDER = "template"
+  DATABASE_PATH = "data/runtime/event_seo.db"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "15s"
+    method = "GET"
+    path = "/healthz"
+
+[[vm]]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1

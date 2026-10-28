@@ -5,20 +5,23 @@ services:
       - "8000:8000"
     environment:
       MCP_TRANSPORT: streamable-http
-      MCP_HTTP_HOST: 127.0.0.1
+      MCP_HTTP_HOST: 0.0.0.0
       MCP_HTTP_PORT: 8000
-      MCP_ALLOW_REMOTE_BIND: "false"
-      AI_PROVIDER: template
-      DRY_RUN_DEFAULT: "true"
+      MCP_ALLOW_REMOTE_BIND: "true"
+      # Required — set in .env or your secret store. Never commit real tokens.
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:?MCP_AUTH_TOKEN is required}
+      AI_PROVIDER: ${AI_PROVIDER:-template}
+      DRY_RUN_DEFAULT: ${DRY_RUN_DEFAULT:-true}
+      REQUIRE_PUBLICATION_AUTHORIZATION: "true"
       DATABASE_PATH: data/runtime/event_seo.db
-      LOG_LEVEL: INFO
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      EVENTBRITE_API_TOKEN: ${EVENTBRITE_API_TOKEN:-}
     volumes:
       - mcp-data:/app/data/runtime
       - mcp-evidence:/app/data/evidence
-    # For non-localhost bind in a controlled deployment, set:
-    # MCP_HTTP_HOST=0.0.0.0
-    # MCP_ALLOW_REMOTE_BIND=true
-    # MCP_AUTH_TOKEN=<strong-token>
     restart: unless-stopped
 
 volumes:
