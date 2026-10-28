@@ -1,0 +1,57 @@
+{
+  "event_id": "evt-sample-ai-summit-2026",
+  "event_title": "Sample AI Builders Summit 2026 (FICTIONAL)",
+  "event_description": "A fictional sample conference used only for local development and dry-run testing of the Event Off-Page SEO Automation MCP. It is not a real event and must never be submitted to live directories.",
+  "landing_page_url": "https://example.com/events/sample-ai-builders-summit-2026",
+  "start_datetime": "2026-09-15T09:00:00",
+  "timezone": "America/Los_Angeles",
+  "event_type": "conference",
+  "target_audience": "AI engineers, product leaders, and developer advocates",
+  "primary_keywords": ["AI summit", "developer conference", "machine learning event"],
+  "registration_url": "https://example.com/events/sample-ai-builders-summit-2026/register",
+  "organizer_name": "Example Events Lab",
+  "end_datetime": "2026-09-16T17:00:00",
+  "venue_name": "Example Convention Center",
+  "street_address": "100 Sample Street",
+  "city": "San Francisco",
+  "state_or_region": "CA",
+  "country": "US",
+  "virtual_event": false,
+  "agenda": [
+    "Opening keynote: Building trustworthy AI systems",
+    "Workshop: Evaluation pipelines for LLM apps",
+    "Panel: Partner ecosystems and go-to-market"
+  ],
+  "speakers": [
+    "Alex Rivera (FICTIONAL)",
+    "Jordan Lee (FICTIONAL)"
+  ],
+  "speaker_bios": [
+    "Alex Rivera is a fictional sample speaker biography for dry-run content generation.",
+    "Jordan Lee is a fictional sample speaker biography for dry-run content generation."
+  ],
+  "partner_names": ["Example Cloud Partner"],
+  "partner_urls": ["https://example.com/partners/example-cloud"],
+  "featured_services": ["Hands-on workshops", "Partner showcase"],
+  "hero_image_url": "https://example.com/assets/sample-summit-hero.png",
+  "logo_url": "https://example.com/assets/sample-summit-logo.png",
+  "registration_deadline": "2026-09-01T23:59:00",
+  "faqs": [
+    {
+      "question": "Is this a real event?",
+      "answer": "No. This record is labelled FICTIONAL and exists only for development and testing."
+    }
+  ],
+  "approved_claims": [
+    "This is a sample event record for software testing."
+  ],
+  "excluded_claims": [
+    "Do not invent attendance numbers, rankings, or endorsements."
+  ],
+  "brand_voice": "Clear, professional, and factual. No hype or fabricated social proof.",
+  "campaign_utm_parameters": {
+    "utm_source": "offpage_seo",
+    "utm_medium": "directory",
+    "utm_campaign": "sample_ai_summit_2026"
+  }
+}

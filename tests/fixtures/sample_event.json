@@ -1,0 +1,16 @@
+{
+  "event_id": "evt-test-001",
+  "event_title": "Test AI Meetup (FICTIONAL)",
+  "event_description": "Fictional event used only in automated tests.",
+  "landing_page_url": "https://example.com/events/test-ai-meetup",
+  "start_datetime": "2026-11-01T18:00:00",
+  "timezone": "UTC",
+  "event_type": "meetup",
+  "target_audience": "developers",
+  "primary_keywords": ["AI", "testing"],
+  "registration_url": "https://example.com/events/test-ai-meetup/register",
+  "organizer_name": "Test Organizer",
+  "city": "Austin",
+  "country": "US",
+  "approved_claims": ["This is a test fixture."]
+}

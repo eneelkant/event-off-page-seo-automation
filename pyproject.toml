@@ -1,0 +1,83 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "event-seo-mcp"
+version = "0.1.0"
+description = "AI-powered off-page SEO automation MCP for event directory submissions, digital PR, guest posting, partner promotion, and backlink tracking."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+authors = [{ name = "Event SEO MCP Contributors" }]
+keywords = ["mcp", "seo", "events", "automation", "playwright"]
+dependencies = [
+  "mcp>=2.3.0,<3",
+  "pydantic>=2.7,<3",
+  "pydantic-settings>=2.4,<3",
+  "httpx>=0.27,<1",
+  "python-dotenv>=1.0,<2",
+  "uvicorn>=0.30,<1",
+  "starlette>=0.40,<2",
+]
+
+[project.optional-dependencies]
+browser = [
+  "playwright>=1.48,<2",
+]
+ai = [
+  "openai>=1.50,<2",
+  "anthropic>=0.39,<1",
+  "google-genai>=1.0,<2",
+]
+# Optional frameworks soft-fail when missing; listed for documentation only.
+optional-frameworks = [
+  "browser-use>=0.1.40; python_version>='3.11'",
+  "crawl4ai>=0.4; python_version>='3.11'",
+]
+dev = [
+  "pytest>=8.3,<9",
+  "pytest-asyncio>=0.24,<1",
+  "pytest-cov>=5,<7",
+  "anyio>=4.6,<5",
+]
+all = [
+  "event-seo-mcp[browser,ai,dev]",
+]
+
+[project.scripts]
+event-seo-mcp = "event_seo_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/event_seo_mcp"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src/event_seo_mcp" = "event_seo_mcp"
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/event_seo_mcp",
+  "config",
+  "data",
+  "docs",
+  "scripts",
+  "tests",
+  "README.md",
+  "LICENSE",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]
+filterwarnings = [
+  "ignore::DeprecationWarning",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3,<9",
+  "pytest-asyncio>=0.24,<1",
+  "pytest-cov>=5,<7",
+  "anyio>=4.6,<5",
+]

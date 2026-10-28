@@ -1,0 +1,26 @@
+services:
+  event-seo-mcp:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      MCP_TRANSPORT: streamable-http
+      MCP_HTTP_HOST: 127.0.0.1
+      MCP_HTTP_PORT: 8000
+      MCP_ALLOW_REMOTE_BIND: "false"
+      AI_PROVIDER: template
+      DRY_RUN_DEFAULT: "true"
+      DATABASE_PATH: data/runtime/event_seo.db
+      LOG_LEVEL: INFO
+    volumes:
+      - mcp-data:/app/data/runtime
+      - mcp-evidence:/app/data/evidence
+    # For non-localhost bind in a controlled deployment, set:
+    # MCP_HTTP_HOST=0.0.0.0
+    # MCP_ALLOW_REMOTE_BIND=true
+    # MCP_AUTH_TOKEN=<strong-token>
+    restart: unless-stopped
+
+volumes:
+  mcp-data:
+  mcp-evidence:
