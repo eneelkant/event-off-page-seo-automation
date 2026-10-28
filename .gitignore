@@ -28,12 +28,16 @@ credentials.json
 service-account*.json
 
 # Runtime data
-data/runtime/
-data/browser-sessions/
-data/evidence/
+data/runtime/**
+!data/runtime/.gitkeep
+data/browser-sessions/**
+!data/browser-sessions/.gitkeep
+data/evidence/**
+!data/evidence/.gitkeep
 *.db
 *.sqlite
 *.sqlite3
+!data/runtime/.gitkeep
 
 # OS / IDE
 .DS_Store
