@@ -1,0 +1,9 @@
+# Local development override — binds loopback-only, auth optional.
+# Usage: docker compose -f compose.yaml -f compose.dev.yaml up --build
+services:
+  event-seo-mcp:
+    environment:
+      MCP_HTTP_HOST: 127.0.0.1
+      MCP_ALLOW_REMOTE_BIND: "false"
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-}
+      DRY_RUN_DEFAULT: "true"

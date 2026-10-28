@@ -57,11 +57,18 @@ pytest -q
 
 Tests use fixtures/mocks only — they never submit real event listings.
 
-### Docker
+### Docker (production-shaped)
 
 ```bash
-docker compose up --build
+export MCP_AUTH_TOKEN="$(openssl rand -hex 32)"
+docker compose up --build -d
+curl -fsS http://127.0.0.1:8000/healthz
+# MCP tools require: Authorization: Bearer $MCP_AUTH_TOKEN → /mcp
 ```
+
+Local loopback override: `docker compose -f compose.yaml -f compose.dev.yaml up --build`
+
+There is **no hosted public URL in this repository by default**. Deploy the image to Fly/Railway/Render/Cloud Run (or your VM) with `MCP_AUTH_TOKEN` set. See `docs/CLIENT_SETUP.md` and the production deploy notes in the project store after release.
 
 ## MCP tools
 

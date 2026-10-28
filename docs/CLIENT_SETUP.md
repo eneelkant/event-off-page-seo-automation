@@ -46,3 +46,16 @@ For remote deployment:
 
 - Use Streamable HTTP with authentication when deploying remotely.
 - Keep publication tools dry-run by default.
+
+
+## Production Streamable HTTP auth
+
+Production deployments require `MCP_AUTH_TOKEN`. Clients must send:
+
+```
+Authorization: Bearer <MCP_AUTH_TOKEN>
+```
+
+`GET /healthz` is unauthenticated for load-balancer probes. The MCP endpoint `/mcp` rejects missing/invalid tokens with HTTP 401.
+
+See `docs/DEPLOY.md` for Fly.io / Docker hosting steps.

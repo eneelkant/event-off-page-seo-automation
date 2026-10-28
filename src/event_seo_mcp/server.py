@@ -3,27 +3,32 @@
 from __future__ import annotations
 
 import logging
-import os
 import sys
 from typing import Any
 
+import uvicorn
 from mcp.server import MCPServer
+from starlette.applications import Starlette
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
-from event_seo_mcp.database.connection import Database, get_database, reset_database_singleton
+from event_seo_mcp import __version__
+from event_seo_mcp.database.connection import Database, get_database
 from event_seo_mcp.database.repository import Repository
 from event_seo_mcp.security.auth import SecurityError, validate_bind_address
-from event_seo_mcp.settings import get_settings, reset_settings_cache
+from event_seo_mcp.security.http_middleware import BearerTokenMiddleware
+from event_seo_mcp.settings import Settings, get_settings, reset_settings_cache
 from event_seo_mcp.tools.handlers import ToolService
 from event_seo_mcp.tools.register import register_tools
-from event_seo_mcp import __version__
 
 
-def create_server(settings=None, database: Database | None = None) -> tuple[MCPServer, ToolService]:
+def create_server(
+    settings: Settings | None = None, database: Database | None = None
+) -> tuple[MCPServer, ToolService]:
     settings = settings or get_settings()
     settings.ensure_runtime_dirs()
     db = database or get_database(settings.resolved_database_path)
-    repo = Repository(db)
-    service = ToolService(repo, settings)
+    service = ToolService(Repository(db), settings)
     service.load_example_event_if_needed()
 
     mcp = MCPServer(
@@ -48,6 +53,43 @@ def configure_logging(level: str) -> None:
     )
 
 
+def build_http_app(mcp: MCPServer, settings: Settings) -> Starlette:
+    """Build Streamable HTTP ASGI app with /healthz and Bearer auth when configured."""
+
+    @mcp.custom_route("/healthz", methods=["GET"])
+    async def healthz(_request: Request) -> JSONResponse:
+        return JSONResponse(
+            {
+                "status": "ok",
+                "service": "event-off-page-seo-automation",
+                "version": __version__,
+                "dry_run_default": settings.dry_run_default,
+            }
+        )
+
+    app = mcp.streamable_http_app(
+        streamable_http_path=settings.mcp_http_path,
+        json_response=True,
+        stateless_http=True,
+        host=settings.mcp_http_host,
+    )
+
+    if settings.mcp_auth_token:
+        app.add_middleware(
+            BearerTokenMiddleware,
+            token=settings.mcp_auth_token,
+            public_paths={"/healthz"},
+        )
+        logging.info("Bearer authentication enabled for Streamable HTTP (except /healthz)")
+    else:
+        host = settings.mcp_http_host.strip().lower()
+        if host not in {"127.0.0.1", "localhost", "::1"}:
+            raise SecurityError("MCP_AUTH_TOKEN is required for non-localhost Streamable HTTP")
+        logging.warning("Streamable HTTP running without auth token (localhost only)")
+
+    return app
+
+
 def main(argv: list[str] | None = None) -> None:
     argv = list(sys.argv[1:] if argv is None else argv)
     reset_settings_cache()
@@ -69,27 +111,23 @@ def main(argv: list[str] | None = None) -> None:
     if transport == "streamable-http":
         try:
             validate_bind_address(settings)
+            app = build_http_app(mcp, settings)
         except SecurityError as exc:
             logging.error("Refusing to start HTTP transport: %s", exc)
             raise SystemExit(2) from exc
-        kwargs: dict[str, Any] = {
-            "transport": "streamable-http",
-            "host": settings.mcp_http_host,
-            "port": settings.mcp_http_port,
-            "streamable_http_path": settings.mcp_http_path,
-            "stateless_http": True,
-            "json_response": True,
-        }
-        # Auth token is validated at bind policy level; clients should send it as Bearer.
-        if settings.mcp_auth_token:
-            os.environ.setdefault("MCP_AUTH_TOKEN", settings.mcp_auth_token)
+
         logging.info(
-            "Starting Streamable HTTP on http://%s:%s%s",
+            "Starting Streamable HTTP on http://%s:%s%s (healthz=/healthz)",
             settings.mcp_http_host,
             settings.mcp_http_port,
             settings.mcp_http_path,
         )
-        mcp.run(**kwargs)
+        uvicorn.run(
+            app,
+            host=settings.mcp_http_host,
+            port=settings.mcp_http_port,
+            log_level=settings.log_level.lower(),
+        )
         return
 
     raise SystemExit(f"Unsupported transport: {transport}")
