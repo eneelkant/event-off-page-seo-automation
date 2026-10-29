@@ -9,7 +9,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     MCP_ALLOW_REMOTE_BIND=true \
     AI_PROVIDER=template \
     DRY_RUN_DEFAULT=true \
-    REQUIRE_PUBLICATION_AUTHORIZATION=true
+    REQUIRE_PUBLICATION_AUTHORIZATION=true \
+    REPO_ROOT=/app \
+    DATABASE_PATH=/app/data/runtime/event_seo.db \
+    PLATFORMS_CONFIG_PATH=/app/config/platforms.json
 
 WORKDIR /app
 

@@ -68,7 +68,14 @@ class Settings(BaseSettings):
         default="EventSeoMCP/0.1 (+https://github.com/eneelkant/event-off-page-seo-automation)"
     )
 
-    @field_validator("database_path", "platforms_config_path", "browser_session_dir", "evidence_dir", mode="before")
+    @field_validator(
+        "database_path",
+        "platforms_config_path",
+        "browser_session_dir",
+        "evidence_dir",
+        "repo_root",
+        mode="before",
+    )
     @classmethod
     def _as_path(cls, value: object) -> Path:
         return Path(str(value))
