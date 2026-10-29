@@ -41,7 +41,7 @@ curl -fsS http://127.0.0.1:8000/healthz
 
 | Variable | Required | Notes |
 | --- | --- | --- |
-| `MCP_AUTH_TOKEN` | **Yes** | Bearer secret for `/mcp` |
+| `MCP_AUTH_TOKEN` | **Yes** | Bearer secret for `/mcp` and the Gemini routes `/api/*` |
 | `MCP_ALLOW_REMOTE_BIND` | Yes (`true`) | With `MCP_HTTP_HOST=0.0.0.0` |
 | `DRY_RUN_DEFAULT` | Recommended `true` | Prevents accidental live publishes |
 | `AI_PROVIDER` + provider key | For LLM content | `template` works offline |
@@ -50,6 +50,8 @@ curl -fsS http://127.0.0.1:8000/healthz
 | `EVENTBRITE_CURRENCY` | Optional (`USD`) | ISO 4217 for create-event |
 | `EVENTBRITE_PUBLISH_ON_CREATE` | Optional (`false`) | If `true`, live authorized submit also calls publish |
 | Other platform tokens | Optional | Other adapters still `NEEDS_VERIFICATION` |
+| `GOOGLE_SHEETS_SPREADSHEET_ID` | For Sheets tracking | Share the sheet with the service account as Editor |
+| `GOOGLE_SHEETS_CREDENTIALS_JSON` or `GOOGLE_APPLICATION_CREDENTIALS` | For Sheets tracking | Service-account key. Never commit it |
 
 Eventbrite remains `NEEDS_VERIFICATION` until a human confirms live create. Do not set Eventbrite Fly secrets or mark `READY` without explicit live approval.
 

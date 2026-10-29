@@ -53,7 +53,9 @@ def configure_logging(level: str) -> None:
     )
 
 
-def build_http_app(mcp: MCPServer, settings: Settings) -> Starlette:
+def build_http_app(
+    mcp: MCPServer, settings: Settings, service: ToolService | None = None
+) -> Starlette:
     """Build Streamable HTTP ASGI app with /healthz and Bearer auth when configured."""
 
     @mcp.custom_route("/healthz", methods=["GET"])
@@ -66,6 +68,11 @@ def build_http_app(mcp: MCPServer, settings: Settings) -> Starlette:
                 "dry_run_default": settings.dry_run_default,
             }
         )
+
+    if service is not None:
+        from event_seo_mcp.integrations.google_sheets.http_api import register_sheets_http
+
+        register_sheets_http(mcp, service, settings)
 
     app = mcp.streamable_http_app(
         streamable_http_path=settings.mcp_http_path,
@@ -102,7 +109,7 @@ def main(argv: list[str] | None = None) -> None:
     if "--stdio" in argv:
         transport = "stdio"
 
-    mcp, _service = create_server(settings)
+    mcp, service = create_server(settings)
 
     if transport == "stdio":
         mcp.run(transport="stdio")
@@ -111,7 +118,7 @@ def main(argv: list[str] | None = None) -> None:
     if transport == "streamable-http":
         try:
             validate_bind_address(settings)
-            app = build_http_app(mcp, settings)
+            app = build_http_app(mcp, settings, service)
         except SecurityError as exc:
             logging.error("Refusing to start HTTP transport: %s", exc)
             raise SystemExit(2) from exc

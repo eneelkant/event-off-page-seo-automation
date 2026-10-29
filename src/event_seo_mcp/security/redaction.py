@@ -32,6 +32,11 @@ SENSITIVE_KEYS = {
     "eventbrite_api_token",
     "personal_oauth_token",
     "private_token",
+    "private_key",
+    "private_key_id",
+    "google_sheets_credentials_json",
+    "client_secret",
+    "password_cell",
 }
 
 

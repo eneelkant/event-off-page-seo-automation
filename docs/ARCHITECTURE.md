@@ -27,6 +27,7 @@ Event Input → Validation → Platform Discovery/Eligibility
 | `tracking/` | Backlink verifier |
 | `reporting/` | JSON/CSV campaign reports |
 | `security/` | Secret redaction + bind/auth guards |
+| `integrations/google_sheets/` | Sheets API targets, submission tracking, Gemini HTTP bridge |
 
 ## Design rules
 

@@ -1021,6 +1021,7 @@ name = "event-seo-mcp"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "google-auth" },
     { name = "httpx" },
     { name = "mcp" },
     { name = "pydantic" },
@@ -1075,6 +1076,7 @@ requires-dist = [
     { name = "browser-use", marker = "python_full_version >= '3.11' and extra == 'optional-frameworks'", specifier = ">=0.1.40" },
     { name = "crawl4ai", marker = "python_full_version >= '3.11' and extra == 'optional-frameworks'", specifier = ">=0.4" },
     { name = "event-seo-mcp", extras = ["browser", "ai", "dev"], marker = "extra == 'all'" },
+    { name = "google-auth", specifier = ">=2.40,<3" },
     { name = "google-genai", marker = "extra == 'ai'", specifier = ">=1.0,<2" },
     { name = "httpx", specifier = ">=0.27,<1" },
     { name = "mcp", specifier = ">=2.3.0,<3" },

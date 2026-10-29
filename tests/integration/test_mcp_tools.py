@@ -33,6 +33,9 @@ EXPECTED_TOOLS = {
     "get_campaign_report",
     "export_submission_report",
     "check_adapter_health",
+    "list_submission_targets",
+    "submit_event_to_site",
+    "record_publication_update",
 }
 
 
