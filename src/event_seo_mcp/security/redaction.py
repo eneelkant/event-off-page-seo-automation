@@ -29,6 +29,9 @@ SENSITIVE_KEYS = {
     "anthropic_api_key",
     "gemini_api_key",
     "skyvern_api_key",
+    "eventbrite_api_token",
+    "personal_oauth_token",
+    "private_token",
 }
 
 

@@ -45,7 +45,13 @@ curl -fsS http://127.0.0.1:8000/healthz
 | `MCP_ALLOW_REMOTE_BIND` | Yes (`true`) | With `MCP_HTTP_HOST=0.0.0.0` |
 | `DRY_RUN_DEFAULT` | Recommended `true` | Prevents accidental live publishes |
 | `AI_PROVIDER` + provider key | For LLM content | `template` works offline |
-| `EVENTBRITE_API_TOKEN` etc. | Optional | Live adapters still `NEEDS_VERIFICATION` |
+| `EVENTBRITE_API_TOKEN` | Optional | Private token; dry-run works without it |
+| `EVENTBRITE_ORGANIZATION_ID` | Optional for dry-run; **required** for live create | From `/users/me/organizations/` |
+| `EVENTBRITE_CURRENCY` | Optional (`USD`) | ISO 4217 for create-event |
+| `EVENTBRITE_PUBLISH_ON_CREATE` | Optional (`false`) | If `true`, live authorized submit also calls publish |
+| Other platform tokens | Optional | Other adapters still `NEEDS_VERIFICATION` |
+
+Eventbrite remains `NEEDS_VERIFICATION` until a human confirms live create. Do not set Eventbrite Fly secrets or mark `READY` without explicit live approval.
 
 ## Client config (after you have a URL)
 

@@ -80,8 +80,10 @@ There is **no hosted public URL in this repository by default**. Deploy the imag
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Platform adapters](docs/PLATFORM_ADAPTERS.md)
+- [Eventbrite setup](docs/EVENTBRITE.md)
 - [Security](docs/SECURITY.md)
 - [Client setup](docs/CLIENT_SETUP.md)
+- [Deploy](docs/DEPLOY.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 
 ## License

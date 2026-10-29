@@ -8,19 +8,19 @@
       "platform_name": "Eventbrite",
       "category": "event_directory",
       "official_homepage": "https://www.eventbrite.com",
-      "verified_submission_url": null,
+      "verified_submission_url": "https://www.eventbriteapi.com/v3/organizations/{organization_id}/events/",
       "submission_method": "api_preferred",
       "adapter_name": "eventbrite",
       "authentication_method": "oauth_or_api_key",
       "required_fields": ["event_title", "event_description", "start_datetime", "timezone", "landing_page_url"],
-      "optional_fields": ["end_datetime", "venue_name", "city", "country", "hero_image_url"],
+      "optional_fields": ["end_datetime", "venue_name", "city", "country", "hero_image_url", "virtual_event"],
       "supported_content_types": ["event_directory_description"],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
-      "documentation_url": "https://www.eventbrite.com/platform/api",
-      "operational_notes": "Official API exists; adapter scaffolds dry-run only until credentials and create-event flow are verified."
+      "documentation_url": "https://www.eventbrite.com/platform/docs/create-events",
+      "operational_notes": "API v3 create/ticket/publish wired from official docs (Bearer private token; POST /organizations/{organization_id}/events/; ticket_classes; optional publish). Dry-run default; mocked unit tests only. Still NEEDS_VERIFICATION until a human confirms live create with EVENTBRITE_API_TOKEN + EVENTBRITE_ORGANIZATION_ID and explicit authorize_publication. No documented public sandbox — live calls use production API. Do not mark READY without live proof."
     },
     {
       "platform_id": "meetup",
