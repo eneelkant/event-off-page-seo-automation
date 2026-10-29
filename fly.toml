@@ -20,7 +20,9 @@ primary_region = "iad"
   DRY_RUN_DEFAULT = "true"
   REQUIRE_PUBLICATION_AUTHORIZATION = "true"
   AI_PROVIDER = "template"
-  DATABASE_PATH = "data/runtime/event_seo.db"
+  REPO_ROOT = "/app"
+  DATABASE_PATH = "/app/data/runtime/event_seo.db"
+  PLATFORMS_CONFIG_PATH = "/app/config/platforms.json"
 
 [http_service]
   internal_port = 8000
