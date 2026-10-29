@@ -9,13 +9,19 @@ from event_seo_mcp.discovery.platform_discovery import load_platforms_file
 
 def test_platforms_file_loads() -> None:
     platforms = load_platforms_file(Path("config/platforms.json"))
-    assert len(platforms.platforms) >= 30
+    assert len(platforms.platforms) == 30
+    assert len(platforms.registry_entries()) == 35
     assert all(p.automation_status == "NEEDS_VERIFICATION" for p in platforms.platforms)
+    assert all(w.automation_status == "NEEDS_VERIFICATION" for w in platforms.workflows)
 
 
 def test_no_invented_ready_platforms() -> None:
     platforms = load_platforms_file(Path("config/platforms.json"))
-    ready = [p for p in platforms.platforms if p.automation_status == "READY"]
+    ready = [
+        p
+        for p in platforms.platforms + platforms.workflows
+        if p.automation_status == "READY"
+    ]
     assert ready == []
 
 
@@ -24,3 +30,4 @@ def test_eventbrite_has_docs_hint() -> None:
     eb = platforms.by_id("eventbrite")
     assert eb is not None
     assert eb.official_homepage is not None
+    assert eb.documentation_url is not None

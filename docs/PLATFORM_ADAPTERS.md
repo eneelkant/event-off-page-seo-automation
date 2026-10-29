@@ -13,7 +13,7 @@ All platforms in `config/platforms.json` ship as `NEEDS_VERIFICATION` until a wo
 | `community` | Reddit, HN, DEV, Indie Hackers | Policy-safe drafts; automation blocked for strict subs |
 | `digital_pr` | PR Newswire, Business Wire, GlobeNewswire | Release drafts only |
 | `guest_post` | DZone, TechTarget, CMSWire, InformationWeek | Pitch/article drafts only |
-| `linkedin` | LinkedIn thought-leadership variants | Drafts only; OAuth posting not verified |
+| `linkedin` | LinkedIn (1 platform + 6 workflows) | Drafts only; OAuth posting not verified |
 
 ## Shared interface
 

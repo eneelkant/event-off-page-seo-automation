@@ -331,6 +331,75 @@ class Repository:
             ),
         )
 
+    def save_publishing_rule_evaluation(
+        self,
+        *,
+        platform_id: str,
+        dry_run: bool,
+        authorize_publication: bool,
+        allowed: bool,
+        eligible_for_live: bool,
+        result: dict[str, Any],
+        event_id: str | None = None,
+    ) -> str:
+        evaluation_id = str(uuid.uuid4())
+        self.db.execute(
+            """
+            INSERT INTO publishing_rule_evaluations(
+              evaluation_id, event_id, platform_id, dry_run, authorize_publication,
+              allowed, eligible_for_live, result_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                evaluation_id,
+                event_id,
+                platform_id,
+                int(dry_run),
+                int(authorize_publication),
+                int(allowed),
+                int(eligible_for_live),
+                json.dumps(redact_mapping(result)),
+                _now(),
+            ),
+        )
+        return evaluation_id
+
+    def save_registry_snapshot(
+        self, *, version: str, totals: dict[str, Any], validation: dict[str, Any]
+    ) -> str:
+        snapshot_id = str(uuid.uuid4())
+        self.db.execute(
+            """
+            INSERT INTO registry_snapshots(snapshot_id, version, totals_json, validation_json, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                snapshot_id,
+                version,
+                json.dumps(totals),
+                json.dumps(validation),
+                _now(),
+            ),
+        )
+        return snapshot_id
+
+    def list_registry_entries(self) -> list[PlatformRecord]:
+        """Submit targets: workflows + platforms except LinkedIn parent."""
+        return [
+            p
+            for p in self.list_platforms()
+            if p.is_workflow or p.platform_id != "linkedin"
+        ]
+
+    def list_workflows(self, parent_platform_id: str | None = None) -> list[PlatformRecord]:
+        workflows = [p for p in self.list_platforms() if p.is_workflow]
+        if parent_platform_id:
+            workflows = [w for w in workflows if w.parent_platform_id == parent_platform_id]
+        return workflows
+
+    def list_distinct_platforms(self) -> list[PlatformRecord]:
+        return [p for p in self.list_platforms() if not p.is_workflow]
+
     @staticmethod
     def _row_to_job(row: Any) -> SubmissionJobRecord:
         return SubmissionJobRecord(

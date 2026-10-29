@@ -1,7 +1,23 @@
 {
-  "version": "0.1.0",
-  "last_updated": "2026-03-28",
-  "notes": "Submission URLs and APIs are null until independently verified. Do not invent endpoints. Homepage is not a submission endpoint.",
+  "version": "0.2.0",
+  "last_updated": "2026-10-29",
+  "notes": "Off-page SEO registry: 30 distinct platforms, 6 LinkedIn workflows, 35 submit/registry entries. Do not invent submission URLs/APIs. Unknown fields are null; status NEEDS_VERIFICATION until live-tested. LinkedIn is one platform; workflows are separate registry entries under parent_platform_id=linkedin.",
+  "categories": [
+    "event_directory",
+    "ai_tech_calendar",
+    "partner_marketing",
+    "industry_community",
+    "digital_pr",
+    "guest_posting",
+    "linkedin_thought_leadership"
+  ],
+  "totals": {
+    "categories": 7,
+    "distinct_platforms": 30,
+    "linkedin_workflows": 6,
+    "registry_entries": 35,
+    "formula": "29 non-LinkedIn platforms + 6 LinkedIn workflows = 35 registry entries; LinkedIn parent + 29 = 30 distinct platforms"
+  },
   "platforms": [
     {
       "platform_id": "eventbrite",
@@ -12,15 +28,77 @@
       "submission_method": "api_preferred",
       "adapter_name": "eventbrite",
       "authentication_method": "oauth_or_api_key",
-      "required_fields": ["event_title", "event_description", "start_datetime", "timezone", "landing_page_url"],
-      "optional_fields": ["end_datetime", "venue_name", "city", "country", "hero_image_url", "virtual_event"],
-      "supported_content_types": ["event_directory_description"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "start_datetime",
+        "timezone",
+        "landing_page_url"
+      ],
+      "optional_fields": [
+        "end_datetime",
+        "venue_name",
+        "city",
+        "country",
+        "hero_image_url",
+        "virtual_event"
+      ],
+      "supported_content_types": [
+        "event_directory_description"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
       "documentation_url": "https://www.eventbrite.com/platform/docs/create-events",
-      "operational_notes": "API v3 create/ticket/publish wired from official docs (Bearer private token; POST /organizations/{organization_id}/events/; ticket_classes; optional publish). Dry-run default; mocked unit tests only. Still NEEDS_VERIFICATION until a human confirms live create with EVENTBRITE_API_TOKEN + EVENTBRITE_ORGANIZATION_ID and explicit authorize_publication. No documented public sandbox — live calls use production API. Do not mark READY without live proof."
+      "operational_notes": "API v3 create/ticket/publish wired from official docs (Bearer private token; POST /organizations/{organization_id}/events/; ticket_classes; optional publish). Dry-run default; mocked unit tests only. Still NEEDS_VERIFICATION until a human confirms live create with EVENTBRITE_API_TOKEN + EVENTBRITE_ORGANIZATION_ID and explicit authorize_publication. No documented public sandbox \u2014 live calls use production API. Do not mark READY without live proof.",
+      "credentials": {
+        "env_vars": [
+          "EVENTBRITE_API_TOKEN",
+          "EVENTBRITE_ORGANIZATION_ID"
+        ],
+        "optional_env_vars": [
+          "EVENTBRITE_CURRENCY",
+          "EVENTBRITE_PUBLISH_ON_CREATE",
+          "EVENTBRITE_API_BASE_URL"
+        ],
+        "auth_type": "bearer_private_token",
+        "required_for_live": true,
+        "docs_url": "https://www.eventbrite.com/platform/docs/authentication"
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.eventbrite.com",
+            "verified": true
+          },
+          {
+            "type": "verified_submission_url",
+            "url": "https://www.eventbriteapi.com/v3/organizations/{organization_id}/events/",
+            "verified": true
+          },
+          {
+            "type": "documentation",
+            "url": "https://www.eventbrite.com/platform/docs/create-events",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "eventbrite",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": false
+      }
     },
     {
       "platform_id": "meetup",
@@ -31,15 +109,65 @@
       "submission_method": "api_preferred",
       "adapter_name": "meetup",
       "authentication_method": "oauth",
-      "required_fields": ["event_title", "event_description", "start_datetime", "timezone"],
-      "optional_fields": ["end_datetime", "venue_name", "city", "registration_url"],
-      "supported_content_types": ["event_directory_description"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "start_datetime",
+        "timezone"
+      ],
+      "optional_fields": [
+        "end_datetime",
+        "venue_name",
+        "city",
+        "registration_url"
+      ],
+      "supported_content_types": [
+        "event_directory_description"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": true,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "API/auth surface changes frequently; treat as NEEDS_VERIFICATION until live-tested."
+      "operational_notes": "API/auth surface changes frequently; treat as NEEDS_VERIFICATION until live-tested.",
+      "credentials": {
+        "env_vars": [
+          "MEETUP_OAUTH_ACCESS_TOKEN"
+        ],
+        "optional_env_vars": [
+          "MEETUP_CLIENT_ID",
+          "MEETUP_CLIENT_SECRET"
+        ],
+        "auth_type": "oauth",
+        "required_for_live": true,
+        "docs_url": null
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.meetup.com",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url",
+          "documentation_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "meetup",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": true
+      }
     },
     {
       "platform_id": "10times",
@@ -50,15 +178,61 @@
       "submission_method": "browser",
       "adapter_name": "directory_browser",
       "authentication_method": "account_login",
-      "required_fields": ["event_title", "event_description", "start_datetime", "city", "country"],
-      "optional_fields": ["end_datetime", "venue_name", "registration_url", "hero_image_url"],
-      "supported_content_types": ["event_directory_description"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "start_datetime",
+        "city",
+        "country"
+      ],
+      "optional_fields": [
+        "end_datetime",
+        "venue_name",
+        "registration_url",
+        "hero_image_url"
+      ],
+      "supported_content_types": [
+        "event_directory_description"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": true,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "No verified public submission API; browser dry-run only."
+      "operational_notes": "No verified public submission API; browser dry-run only.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "account_login",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "Account/portal credentials are human-managed; no env var wired yet."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://10times.com",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "10times",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": true
+      }
     },
     {
       "platform_id": "allevents",
@@ -69,15 +243,59 @@
       "submission_method": "browser",
       "adapter_name": "directory_browser",
       "authentication_method": "account_login",
-      "required_fields": ["event_title", "event_description", "start_datetime", "city"],
-      "optional_fields": ["end_datetime", "venue_name", "registration_url"],
-      "supported_content_types": ["event_directory_description"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "start_datetime",
+        "city"
+      ],
+      "optional_fields": [
+        "end_datetime",
+        "venue_name",
+        "registration_url"
+      ],
+      "supported_content_types": [
+        "event_directory_description"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Submission destination not verified."
+      "operational_notes": "Submission destination not verified.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "account_login",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "Account/portal credentials are human-managed; no env var wired yet."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://allevents.in",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "allevents",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": false
+      }
     },
     {
       "platform_id": "conference_alerts",
@@ -88,15 +306,60 @@
       "submission_method": "browser",
       "adapter_name": "directory_browser",
       "authentication_method": "unknown",
-      "required_fields": ["event_title", "event_description", "start_datetime", "city", "country"],
-      "optional_fields": ["end_datetime", "organizer_name", "registration_url"],
-      "supported_content_types": ["event_directory_description"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "start_datetime",
+        "city",
+        "country"
+      ],
+      "optional_fields": [
+        "end_datetime",
+        "organizer_name",
+        "registration_url"
+      ],
+      "supported_content_types": [
+        "event_directory_description"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": true,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Homepage only; submission URL not verified."
+      "operational_notes": "Homepage only; submission URL not verified.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "unknown",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "No API credentials configured; live submit blocked until verified."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://conferencealerts.com",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "conference_alerts",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": true
+      }
     },
     {
       "platform_id": "event_always",
@@ -107,15 +370,53 @@
       "submission_method": "unknown",
       "adapter_name": "directory_browser",
       "authentication_method": "unknown",
-      "required_fields": ["event_title", "event_description", "start_datetime"],
-      "optional_fields": ["city", "country", "registration_url"],
-      "supported_content_types": ["event_directory_description"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "start_datetime"
+      ],
+      "optional_fields": [
+        "city",
+        "country",
+        "registration_url"
+      ],
+      "supported_content_types": [
+        "event_directory_description"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": null,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Official homepage not independently confirmed in this build; discovery required before activation."
+      "operational_notes": "Official homepage not independently confirmed in this build; discovery required before activation.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "unknown",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "No API credentials configured; live submit blocked until verified."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [],
+        "unknown_fields": [
+          "official_homepage",
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "event_always",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": null
+      }
     },
     {
       "platform_id": "events_org",
@@ -126,15 +427,52 @@
       "submission_method": "unknown",
       "adapter_name": "directory_browser",
       "authentication_method": "unknown",
-      "required_fields": ["event_title", "event_description", "start_datetime"],
-      "optional_fields": ["city", "country"],
-      "supported_content_types": ["event_directory_description"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "start_datetime"
+      ],
+      "optional_fields": [
+        "city",
+        "country"
+      ],
+      "supported_content_types": [
+        "event_directory_description"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": null,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Official homepage not independently confirmed; discovery required."
+      "operational_notes": "Official homepage not independently confirmed; discovery required.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "unknown",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "No API credentials configured; live submit blocked until verified."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [],
+        "unknown_fields": [
+          "official_homepage",
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "events_org",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": null
+      }
     },
     {
       "platform_id": "global_conference_alliance",
@@ -145,15 +483,53 @@
       "submission_method": "unknown",
       "adapter_name": "directory_browser",
       "authentication_method": "unknown",
-      "required_fields": ["event_title", "event_description", "start_datetime"],
-      "optional_fields": ["city", "country", "organizer_name"],
-      "supported_content_types": ["event_directory_description"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "start_datetime"
+      ],
+      "optional_fields": [
+        "city",
+        "country",
+        "organizer_name"
+      ],
+      "supported_content_types": [
+        "event_directory_description"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": null,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Official homepage not independently confirmed; discovery required."
+      "operational_notes": "Official homepage not independently confirmed; discovery required.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "unknown",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "No API credentials configured; live submit blocked until verified."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [],
+        "unknown_fields": [
+          "official_homepage",
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "global_conference_alliance",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": null
+      }
     },
     {
       "platform_id": "dev_events",
@@ -164,15 +540,54 @@
       "submission_method": "unknown",
       "adapter_name": "directory_browser",
       "authentication_method": "unknown",
-      "required_fields": ["event_title", "event_description", "start_datetime", "landing_page_url"],
-      "optional_fields": ["end_datetime", "virtual_event", "city"],
-      "supported_content_types": ["event_calendar_listing"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "start_datetime",
+        "landing_page_url"
+      ],
+      "optional_fields": [
+        "end_datetime",
+        "virtual_event",
+        "city"
+      ],
+      "supported_content_types": [
+        "event_calendar_listing"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": null,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Exact product URL ambiguous across similarly named calendars; discovery required."
+      "operational_notes": "Exact product URL ambiguous across similarly named calendars; discovery required.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "unknown",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "No API credentials configured; live submit blocked until verified."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [],
+        "unknown_fields": [
+          "official_homepage",
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "dev_events",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": null
+      }
     },
     {
       "platform_id": "techmeme_events",
@@ -183,15 +598,58 @@
       "submission_method": "manual_or_editorial",
       "adapter_name": "directory_browser",
       "authentication_method": "editorial",
-      "required_fields": ["event_title", "start_datetime", "landing_page_url"],
-      "optional_fields": ["event_description", "city", "country"],
-      "supported_content_types": ["event_calendar_listing"],
+      "required_fields": [
+        "event_title",
+        "start_datetime",
+        "landing_page_url"
+      ],
+      "optional_fields": [
+        "event_description",
+        "city",
+        "country"
+      ],
+      "supported_content_types": [
+        "event_calendar_listing"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": null,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Likely editorial inclusion; no verified self-serve submission endpoint."
+      "operational_notes": "Likely editorial inclusion; no verified self-serve submission endpoint.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "editorial",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "No API credentials configured; live submit blocked until verified."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.techmeme.com/events",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "techmeme_events",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": null
+      }
     },
     {
       "platform_id": "data_science_salon",
@@ -202,15 +660,59 @@
       "submission_method": "partner_or_editorial",
       "adapter_name": "partner",
       "authentication_method": "partner_contact",
-      "required_fields": ["event_title", "event_description", "start_datetime", "organizer_name"],
-      "optional_fields": ["partner_names", "speakers"],
-      "supported_content_types": ["partner_promotion_email", "event_calendar_listing"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "start_datetime",
+        "organizer_name"
+      ],
+      "optional_fields": [
+        "partner_names",
+        "speakers"
+      ],
+      "supported_content_types": [
+        "partner_promotion_email",
+        "event_calendar_listing"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": null,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Partner/editorial path; not a self-serve directory."
+      "operational_notes": "Partner/editorial path; not a self-serve directory.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "partner_contact",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "No API credentials configured; live submit blocked until verified."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.datascience.salon",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "data_science_salon",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": null
+      }
     },
     {
       "platform_id": "cio_events",
@@ -221,15 +723,51 @@
       "submission_method": "unknown",
       "adapter_name": "directory_browser",
       "authentication_method": "unknown",
-      "required_fields": ["event_title", "start_datetime", "landing_page_url"],
-      "optional_fields": ["event_description"],
-      "supported_content_types": ["event_calendar_listing"],
+      "required_fields": [
+        "event_title",
+        "start_datetime",
+        "landing_page_url"
+      ],
+      "optional_fields": [
+        "event_description"
+      ],
+      "supported_content_types": [
+        "event_calendar_listing"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": null,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Homepage not independently confirmed."
+      "operational_notes": "Homepage not independently confirmed.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "unknown",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "No API credentials configured; live submit blocked until verified."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [],
+        "unknown_fields": [
+          "official_homepage",
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "cio_events",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": null
+      }
     },
     {
       "platform_id": "infoworld_events",
@@ -240,15 +778,56 @@
       "submission_method": "editorial",
       "adapter_name": "directory_browser",
       "authentication_method": "editorial",
-      "required_fields": ["event_title", "start_datetime", "landing_page_url"],
-      "optional_fields": ["event_description"],
-      "supported_content_types": ["event_calendar_listing"],
+      "required_fields": [
+        "event_title",
+        "start_datetime",
+        "landing_page_url"
+      ],
+      "optional_fields": [
+        "event_description"
+      ],
+      "supported_content_types": [
+        "event_calendar_listing"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": null,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Editorial calendar path likely; no verified submission API."
+      "operational_notes": "Editorial calendar path likely; no verified submission API.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "editorial",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "No API credentials configured; live submit blocked until verified."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.infoworld.com",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "infoworld_events",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": null
+      }
     },
     {
       "platform_id": "google_cloud_partner",
@@ -259,15 +838,61 @@
       "submission_method": "partner_portal",
       "adapter_name": "partner",
       "authentication_method": "partner_account",
-      "required_fields": ["event_title", "event_description", "start_datetime", "organizer_name", "landing_page_url"],
-      "optional_fields": ["partner_names", "partner_urls", "speakers"],
-      "supported_content_types": ["partner_promotion_email", "partner_spotlight"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "start_datetime",
+        "organizer_name",
+        "landing_page_url"
+      ],
+      "optional_fields": [
+        "partner_names",
+        "partner_urls",
+        "speakers"
+      ],
+      "supported_content_types": [
+        "partner_promotion_email",
+        "partner_spotlight"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Requires partner eligibility; dry-run prepares outreach copy only."
+      "operational_notes": "Requires partner eligibility; dry-run prepares outreach copy only.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "partner_account",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "No API credentials configured; live submit blocked until verified."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://cloud.google.com",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "google_cloud_partner",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": false
+      }
     },
     {
       "platform_id": "microsoft_azure_partner",
@@ -278,15 +903,60 @@
       "submission_method": "partner_portal",
       "adapter_name": "partner",
       "authentication_method": "partner_account",
-      "required_fields": ["event_title", "event_description", "start_datetime", "organizer_name", "landing_page_url"],
-      "optional_fields": ["partner_names", "partner_urls"],
-      "supported_content_types": ["partner_promotion_email", "partner_spotlight"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "start_datetime",
+        "organizer_name",
+        "landing_page_url"
+      ],
+      "optional_fields": [
+        "partner_names",
+        "partner_urls"
+      ],
+      "supported_content_types": [
+        "partner_promotion_email",
+        "partner_spotlight"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Requires partner eligibility; dry-run only."
+      "operational_notes": "Requires partner eligibility; dry-run only.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "partner_account",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "No API credentials configured; live submit blocked until verified."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://azure.microsoft.com",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "microsoft_azure_partner",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": false
+      }
     },
     {
       "platform_id": "databricks_partner",
@@ -297,15 +967,59 @@
       "submission_method": "partner_portal",
       "adapter_name": "partner",
       "authentication_method": "partner_account",
-      "required_fields": ["event_title", "event_description", "start_datetime", "organizer_name"],
-      "optional_fields": ["partner_names", "speakers"],
-      "supported_content_types": ["partner_promotion_email", "partner_spotlight"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "start_datetime",
+        "organizer_name"
+      ],
+      "optional_fields": [
+        "partner_names",
+        "speakers"
+      ],
+      "supported_content_types": [
+        "partner_promotion_email",
+        "partner_spotlight"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Partner program path; not live-tested."
+      "operational_notes": "Partner program path; not live-tested.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "partner_account",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "No API credentials configured; live submit blocked until verified."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.databricks.com",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "databricks_partner",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": false
+      }
     },
     {
       "platform_id": "snowflake_partner",
@@ -316,15 +1030,59 @@
       "submission_method": "partner_portal",
       "adapter_name": "partner",
       "authentication_method": "partner_account",
-      "required_fields": ["event_title", "event_description", "start_datetime", "organizer_name"],
-      "optional_fields": ["partner_names", "speakers"],
-      "supported_content_types": ["partner_promotion_email", "partner_spotlight"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "start_datetime",
+        "organizer_name"
+      ],
+      "optional_fields": [
+        "partner_names",
+        "speakers"
+      ],
+      "supported_content_types": [
+        "partner_promotion_email",
+        "partner_spotlight"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Partner program path; not live-tested."
+      "operational_notes": "Partner program path; not live-tested.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "partner_account",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "No API credentials configured; live submit blocked until verified."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.snowflake.com",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "snowflake_partner",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": false
+      }
     },
     {
       "platform_id": "reddit_artificial",
@@ -335,15 +1093,61 @@
       "submission_method": "manual_with_policy_check",
       "adapter_name": "community",
       "authentication_method": "account_login",
-      "required_fields": ["event_title", "event_description", "landing_page_url"],
-      "optional_fields": ["primary_keywords"],
-      "supported_content_types": ["community_post"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "landing_page_url"
+      ],
+      "optional_fields": [
+        "primary_keywords"
+      ],
+      "supported_content_types": [
+        "community_post"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
       "documentation_url": "https://www.reddit.com/r/artificial",
-      "operational_notes": "Subreddit rules may prohibit promotional automation. Default is content prep + human approval; never auto-post without explicit authorization and policy review."
+      "operational_notes": "Subreddit rules may prohibit promotional automation. Default is content prep + human approval; never auto-post without explicit authorization and policy review.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "account_login",
+        "required_for_live": true,
+        "docs_url": "https://www.reddit.com/r/artificial",
+        "notes": "Account/portal credentials are human-managed; no env var wired yet."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.reddit.com/r/artificial",
+            "verified": true
+          },
+          {
+            "type": "documentation",
+            "url": "https://www.reddit.com/r/artificial",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "reddit_artificial",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": true,
+        "paid_submission_possible": false
+      }
     },
     {
       "platform_id": "reddit_machinelearning",
@@ -354,15 +1158,61 @@
       "submission_method": "manual_with_policy_check",
       "adapter_name": "community",
       "authentication_method": "account_login",
-      "required_fields": ["event_title", "event_description", "landing_page_url"],
-      "optional_fields": ["primary_keywords"],
-      "supported_content_types": ["community_post"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "landing_page_url"
+      ],
+      "optional_fields": [
+        "primary_keywords"
+      ],
+      "supported_content_types": [
+        "community_post"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
       "documentation_url": "https://www.reddit.com/r/MachineLearning",
-      "operational_notes": "Strict self-promo rules; automation blocked by default."
+      "operational_notes": "Strict self-promo rules; automation blocked by default.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "account_login",
+        "required_for_live": true,
+        "docs_url": "https://www.reddit.com/r/MachineLearning",
+        "notes": "Account/portal credentials are human-managed; no env var wired yet."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.reddit.com/r/MachineLearning",
+            "verified": true
+          },
+          {
+            "type": "documentation",
+            "url": "https://www.reddit.com/r/MachineLearning",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "reddit_machinelearning",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": true,
+        "paid_submission_possible": false
+      }
     },
     {
       "platform_id": "hacker_news",
@@ -373,15 +1223,63 @@
       "submission_method": "manual_with_policy_check",
       "adapter_name": "community",
       "authentication_method": "account_login",
-      "required_fields": ["event_title", "landing_page_url"],
-      "optional_fields": ["event_description"],
-      "supported_content_types": ["community_post"],
+      "required_fields": [
+        "event_title",
+        "landing_page_url"
+      ],
+      "optional_fields": [
+        "event_description"
+      ],
+      "supported_content_types": [
+        "community_post"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
       "documentation_url": "https://news.ycombinator.com/newsguidelines.html",
-      "operational_notes": "Submit URL is public; automated posting is discouraged and may violate guidelines. Dry-run prepares title/URL only."
+      "operational_notes": "Submit URL is public; automated posting is discouraged and may violate guidelines. Dry-run prepares title/URL only.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "account_login",
+        "required_for_live": true,
+        "docs_url": "https://news.ycombinator.com/newsguidelines.html",
+        "notes": "Account/portal credentials are human-managed; no env var wired yet."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://news.ycombinator.com",
+            "verified": true
+          },
+          {
+            "type": "verified_submission_url",
+            "url": "https://news.ycombinator.com/submit",
+            "verified": true
+          },
+          {
+            "type": "documentation",
+            "url": "https://news.ycombinator.com/newsguidelines.html",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "hacker_news",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": true,
+        "paid_submission_possible": false
+      }
     },
     {
       "platform_id": "dev_community",
@@ -392,15 +1290,64 @@
       "submission_method": "api_preferred",
       "adapter_name": "community",
       "authentication_method": "api_key",
-      "required_fields": ["event_title", "event_description", "landing_page_url"],
-      "optional_fields": ["primary_keywords", "hero_image_url"],
-      "supported_content_types": ["community_post", "guest_article"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "landing_page_url"
+      ],
+      "optional_fields": [
+        "primary_keywords",
+        "hero_image_url"
+      ],
+      "supported_content_types": [
+        "community_post",
+        "guest_article"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
       "documentation_url": "https://developers.forem.com/api",
-      "operational_notes": "Forem API may support articles; not live-tested in this build."
+      "operational_notes": "Forem API may support articles; not live-tested in this build.",
+      "credentials": {
+        "env_vars": [
+          "DEVTO_API_KEY"
+        ],
+        "optional_env_vars": [],
+        "auth_type": "api_key",
+        "required_for_live": true,
+        "docs_url": "https://developers.forem.com/api"
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://dev.to",
+            "verified": true
+          },
+          {
+            "type": "documentation",
+            "url": "https://developers.forem.com/api",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "dev_community",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": false
+      }
     },
     {
       "platform_id": "indie_hackers",
@@ -411,15 +1358,56 @@
       "submission_method": "browser",
       "adapter_name": "community",
       "authentication_method": "account_login",
-      "required_fields": ["event_title", "event_description", "landing_page_url"],
-      "optional_fields": ["primary_keywords"],
-      "supported_content_types": ["community_post"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "landing_page_url"
+      ],
+      "optional_fields": [
+        "primary_keywords"
+      ],
+      "supported_content_types": [
+        "community_post"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "No verified automation path."
+      "operational_notes": "No verified automation path.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "account_login",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "Account/portal credentials are human-managed; no env var wired yet."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.indiehackers.com",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "indie_hackers",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": false
+      }
     },
     {
       "platform_id": "pr_newswire",
@@ -430,15 +1418,59 @@
       "submission_method": "paid_portal",
       "adapter_name": "digital_pr",
       "authentication_method": "customer_account",
-      "required_fields": ["event_title", "event_description", "organizer_name", "start_datetime"],
-      "optional_fields": ["approved_claims", "excluded_claims", "speakers"],
-      "supported_content_types": ["digital_pr_release"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "organizer_name",
+        "start_datetime"
+      ],
+      "optional_fields": [
+        "approved_claims",
+        "excluded_claims",
+        "speakers"
+      ],
+      "supported_content_types": [
+        "digital_pr_release"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": true,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Paid wire service; prepares release draft only in dry-run."
+      "operational_notes": "Paid wire service; prepares release draft only in dry-run.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "customer_account",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "Account/portal credentials are human-managed; no env var wired yet."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.prnewswire.com",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "pr_newswire",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": true
+      }
     },
     {
       "platform_id": "business_wire",
@@ -449,15 +1481,58 @@
       "submission_method": "paid_portal",
       "adapter_name": "digital_pr",
       "authentication_method": "customer_account",
-      "required_fields": ["event_title", "event_description", "organizer_name", "start_datetime"],
-      "optional_fields": ["approved_claims", "excluded_claims"],
-      "supported_content_types": ["digital_pr_release"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "organizer_name",
+        "start_datetime"
+      ],
+      "optional_fields": [
+        "approved_claims",
+        "excluded_claims"
+      ],
+      "supported_content_types": [
+        "digital_pr_release"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": true,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Paid wire service; dry-run only."
+      "operational_notes": "Paid wire service; dry-run only.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "customer_account",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "Account/portal credentials are human-managed; no env var wired yet."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.businesswire.com",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "business_wire",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": true
+      }
     },
     {
       "platform_id": "globenewswire",
@@ -468,15 +1543,58 @@
       "submission_method": "paid_portal",
       "adapter_name": "digital_pr",
       "authentication_method": "customer_account",
-      "required_fields": ["event_title", "event_description", "organizer_name", "start_datetime"],
-      "optional_fields": ["approved_claims", "excluded_claims"],
-      "supported_content_types": ["digital_pr_release"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "organizer_name",
+        "start_datetime"
+      ],
+      "optional_fields": [
+        "approved_claims",
+        "excluded_claims"
+      ],
+      "supported_content_types": [
+        "digital_pr_release"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": true,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Paid wire service; dry-run only."
+      "operational_notes": "Paid wire service; dry-run only.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "customer_account",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "Account/portal credentials are human-managed; no env var wired yet."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.globenewswire.com",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "globenewswire",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": true
+      }
     },
     {
       "platform_id": "dzone",
@@ -487,15 +1605,59 @@
       "submission_method": "editorial",
       "adapter_name": "guest_post",
       "authentication_method": "contributor_account",
-      "required_fields": ["event_title", "event_description", "organizer_name"],
-      "optional_fields": ["speakers", "primary_keywords", "brand_voice"],
-      "supported_content_types": ["guest_post_pitch", "guest_article"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "organizer_name"
+      ],
+      "optional_fields": [
+        "speakers",
+        "primary_keywords",
+        "brand_voice"
+      ],
+      "supported_content_types": [
+        "guest_post_pitch",
+        "guest_article"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Editorial contribution path; generates pitch/article drafts only."
+      "operational_notes": "Editorial contribution path; generates pitch/article drafts only.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "contributor_account",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "Account/portal credentials are human-managed; no env var wired yet."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://dzone.com",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "dzone",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": false
+      }
     },
     {
       "platform_id": "techtarget",
@@ -506,15 +1668,58 @@
       "submission_method": "editorial",
       "adapter_name": "guest_post",
       "authentication_method": "editorial_contact",
-      "required_fields": ["event_title", "event_description", "organizer_name"],
-      "optional_fields": ["speakers", "primary_keywords"],
-      "supported_content_types": ["guest_post_pitch", "guest_article"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "organizer_name"
+      ],
+      "optional_fields": [
+        "speakers",
+        "primary_keywords"
+      ],
+      "supported_content_types": [
+        "guest_post_pitch",
+        "guest_article"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": null,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Editorial path; not live-tested."
+      "operational_notes": "Editorial path; not live-tested.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "editorial_contact",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "Account/portal credentials are human-managed; no env var wired yet."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.techtarget.com",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "techtarget",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": null
+      }
     },
     {
       "platform_id": "cmswire",
@@ -525,15 +1730,58 @@
       "submission_method": "editorial",
       "adapter_name": "guest_post",
       "authentication_method": "contributor_account",
-      "required_fields": ["event_title", "event_description", "organizer_name"],
-      "optional_fields": ["speakers", "primary_keywords"],
-      "supported_content_types": ["guest_post_pitch", "guest_article"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "organizer_name"
+      ],
+      "optional_fields": [
+        "speakers",
+        "primary_keywords"
+      ],
+      "supported_content_types": [
+        "guest_post_pitch",
+        "guest_article"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Editorial path; generates drafts only."
+      "operational_notes": "Editorial path; generates drafts only.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "contributor_account",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "Account/portal credentials are human-managed; no env var wired yet."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.cmswire.com",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "cmswire",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": false
+      }
     },
     {
       "platform_id": "informationweek",
@@ -544,129 +1792,564 @@
       "submission_method": "editorial",
       "adapter_name": "guest_post",
       "authentication_method": "editorial_contact",
-      "required_fields": ["event_title", "event_description", "organizer_name"],
-      "optional_fields": ["speakers", "primary_keywords"],
-      "supported_content_types": ["guest_post_pitch", "guest_article"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "organizer_name"
+      ],
+      "optional_fields": [
+        "speakers",
+        "primary_keywords"
+      ],
+      "supported_content_types": [
+        "guest_post_pitch",
+        "guest_article"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": null,
       "last_verified_at": null,
       "documentation_url": null,
-      "operational_notes": "Editorial path; not live-tested."
+      "operational_notes": "Editorial path; not live-tested.",
+      "credentials": {
+        "env_vars": [],
+        "optional_env_vars": [],
+        "auth_type": "editorial_contact",
+        "required_for_live": true,
+        "docs_url": null,
+        "notes": "Account/portal credentials are human-managed; no env var wired yet."
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.informationweek.com",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "informationweek",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": null
+      }
     },
     {
-      "platform_id": "linkedin_speaker_announcement",
-      "platform_name": "LinkedIn — Speaker announcement",
+      "platform_id": "linkedin",
+      "platform_name": "LinkedIn",
       "category": "linkedin_thought_leadership",
       "official_homepage": "https://www.linkedin.com",
       "verified_submission_url": null,
       "submission_method": "manual_or_official_api",
       "adapter_name": "linkedin",
       "authentication_method": "oauth",
-      "required_fields": ["event_title", "speakers", "landing_page_url", "start_datetime"],
-      "optional_fields": ["speaker_bios", "brand_voice"],
-      "supported_content_types": ["speaker_announcement", "linkedin_post"],
+      "required_fields": [
+        "event_title",
+        "landing_page_url"
+      ],
+      "optional_fields": [
+        "brand_voice",
+        "approved_claims"
+      ],
+      "supported_content_types": [
+        "linkedin_post"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
       "documentation_url": "https://learn.microsoft.com/en-us/linkedin/",
-      "operational_notes": "Content generation ready; posting requires LinkedIn API/app approval and is not live-tested."
+      "operational_notes": "Distinct platform with 6 thought-leadership workflows. Posting requires LinkedIn developer app/OAuth; not live-tested. Submit via workflow registry entries (linkedin_*), not the parent alone.",
+      "has_workflows": true,
+      "credentials": {
+        "env_vars": [
+          "LINKEDIN_ACCESS_TOKEN"
+        ],
+        "optional_env_vars": [
+          "LINKEDIN_CLIENT_ID",
+          "LINKEDIN_CLIENT_SECRET",
+          "LINKEDIN_ORGANIZATION_URN"
+        ],
+        "auth_type": "oauth",
+        "required_for_live": true,
+        "docs_url": "https://learn.microsoft.com/en-us/linkedin/"
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.linkedin.com",
+            "verified": true
+          },
+          {
+            "type": "documentation",
+            "url": "https://learn.microsoft.com/en-us/linkedin/",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "linkedin",
+      "is_workflow": false,
+      "workflow_id": null,
+      "parent_platform_id": null,
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": false
+      }
+    }
+  ],
+  "workflows": [
+    {
+      "platform_id": "linkedin_speaker_announcement",
+      "platform_name": "LinkedIn \u2014 Speaker announcement",
+      "category": "linkedin_thought_leadership",
+      "official_homepage": "https://www.linkedin.com",
+      "verified_submission_url": null,
+      "submission_method": "manual_or_official_api",
+      "adapter_name": "linkedin",
+      "authentication_method": "oauth",
+      "required_fields": [
+        "event_title",
+        "speakers",
+        "landing_page_url",
+        "start_datetime"
+      ],
+      "optional_fields": [
+        "speaker_bios",
+        "brand_voice"
+      ],
+      "supported_content_types": [
+        "speaker_announcement",
+        "linkedin_post"
+      ],
+      "automation_status": "NEEDS_VERIFICATION",
+      "approval_required": true,
+      "paid_submission_possible": false,
+      "last_verified_at": null,
+      "documentation_url": "https://learn.microsoft.com/en-us/linkedin/",
+      "operational_notes": "Content generation ready; posting requires LinkedIn API/app approval and is not live-tested.",
+      "credentials": {
+        "env_vars": [
+          "LINKEDIN_ACCESS_TOKEN"
+        ],
+        "optional_env_vars": [
+          "LINKEDIN_CLIENT_ID",
+          "LINKEDIN_CLIENT_SECRET",
+          "LINKEDIN_ORGANIZATION_URN"
+        ],
+        "auth_type": "oauth",
+        "required_for_live": true,
+        "docs_url": "https://learn.microsoft.com/en-us/linkedin/"
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.linkedin.com",
+            "verified": true
+          },
+          {
+            "type": "documentation",
+            "url": "https://learn.microsoft.com/en-us/linkedin/",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "linkedin",
+      "is_workflow": true,
+      "workflow_id": "linkedin_speaker_announcement",
+      "parent_platform_id": "linkedin",
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": false
+      }
     },
     {
       "platform_id": "linkedin_customer_success",
-      "platform_name": "LinkedIn — Customer success story",
+      "platform_name": "LinkedIn \u2014 Customer success story",
       "category": "linkedin_thought_leadership",
       "official_homepage": "https://www.linkedin.com",
       "verified_submission_url": null,
       "submission_method": "manual_or_official_api",
       "adapter_name": "linkedin",
       "authentication_method": "oauth",
-      "required_fields": ["event_title", "event_description", "landing_page_url"],
-      "optional_fields": ["approved_claims", "partner_names", "brand_voice"],
-      "supported_content_types": ["customer_success_story", "linkedin_post"],
+      "required_fields": [
+        "event_title",
+        "event_description",
+        "landing_page_url"
+      ],
+      "optional_fields": [
+        "approved_claims",
+        "partner_names",
+        "brand_voice"
+      ],
+      "supported_content_types": [
+        "customer_success_story",
+        "linkedin_post"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
       "documentation_url": "https://learn.microsoft.com/en-us/linkedin/",
-      "operational_notes": "Draft generation only until LinkedIn posting is verified."
+      "operational_notes": "Draft generation only until LinkedIn posting is verified.",
+      "credentials": {
+        "env_vars": [
+          "LINKEDIN_ACCESS_TOKEN"
+        ],
+        "optional_env_vars": [
+          "LINKEDIN_CLIENT_ID",
+          "LINKEDIN_CLIENT_SECRET",
+          "LINKEDIN_ORGANIZATION_URN"
+        ],
+        "auth_type": "oauth",
+        "required_for_live": true,
+        "docs_url": "https://learn.microsoft.com/en-us/linkedin/"
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.linkedin.com",
+            "verified": true
+          },
+          {
+            "type": "documentation",
+            "url": "https://learn.microsoft.com/en-us/linkedin/",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "linkedin",
+      "is_workflow": true,
+      "workflow_id": "linkedin_customer_success",
+      "parent_platform_id": "linkedin",
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": false
+      }
     },
     {
       "platform_id": "linkedin_industry_research",
-      "platform_name": "LinkedIn — Industry research",
+      "platform_name": "LinkedIn \u2014 Industry research",
       "category": "linkedin_thought_leadership",
       "official_homepage": "https://www.linkedin.com",
       "verified_submission_url": null,
       "submission_method": "manual_or_official_api",
       "adapter_name": "linkedin",
       "authentication_method": "oauth",
-      "required_fields": ["event_title", "primary_keywords", "landing_page_url"],
-      "optional_fields": ["approved_claims", "excluded_claims"],
-      "supported_content_types": ["research_summary", "linkedin_post"],
+      "required_fields": [
+        "event_title",
+        "primary_keywords",
+        "landing_page_url"
+      ],
+      "optional_fields": [
+        "approved_claims",
+        "excluded_claims"
+      ],
+      "supported_content_types": [
+        "research_summary",
+        "linkedin_post"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
       "documentation_url": "https://learn.microsoft.com/en-us/linkedin/",
-      "operational_notes": "Must use approved claims only; never invent statistics."
+      "operational_notes": "Must use approved claims only; never invent statistics.",
+      "credentials": {
+        "env_vars": [
+          "LINKEDIN_ACCESS_TOKEN"
+        ],
+        "optional_env_vars": [
+          "LINKEDIN_CLIENT_ID",
+          "LINKEDIN_CLIENT_SECRET",
+          "LINKEDIN_ORGANIZATION_URN"
+        ],
+        "auth_type": "oauth",
+        "required_for_live": true,
+        "docs_url": "https://learn.microsoft.com/en-us/linkedin/"
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.linkedin.com",
+            "verified": true
+          },
+          {
+            "type": "documentation",
+            "url": "https://learn.microsoft.com/en-us/linkedin/",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "linkedin",
+      "is_workflow": true,
+      "workflow_id": "linkedin_industry_research",
+      "parent_platform_id": "linkedin",
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": false
+      }
     },
     {
       "platform_id": "linkedin_agenda_highlights",
-      "platform_name": "LinkedIn — Agenda highlights",
+      "platform_name": "LinkedIn \u2014 Agenda highlights",
       "category": "linkedin_thought_leadership",
       "official_homepage": "https://www.linkedin.com",
       "verified_submission_url": null,
       "submission_method": "manual_or_official_api",
       "adapter_name": "linkedin",
       "authentication_method": "oauth",
-      "required_fields": ["event_title", "agenda", "landing_page_url", "start_datetime"],
-      "optional_fields": ["speakers"],
-      "supported_content_types": ["agenda_highlights", "linkedin_post"],
+      "required_fields": [
+        "event_title",
+        "agenda",
+        "landing_page_url",
+        "start_datetime"
+      ],
+      "optional_fields": [
+        "speakers"
+      ],
+      "supported_content_types": [
+        "agenda_highlights",
+        "linkedin_post"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
       "documentation_url": "https://learn.microsoft.com/en-us/linkedin/",
-      "operational_notes": "Draft generation only."
+      "operational_notes": "Draft generation only.",
+      "credentials": {
+        "env_vars": [
+          "LINKEDIN_ACCESS_TOKEN"
+        ],
+        "optional_env_vars": [
+          "LINKEDIN_CLIENT_ID",
+          "LINKEDIN_CLIENT_SECRET",
+          "LINKEDIN_ORGANIZATION_URN"
+        ],
+        "auth_type": "oauth",
+        "required_for_live": true,
+        "docs_url": "https://learn.microsoft.com/en-us/linkedin/"
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.linkedin.com",
+            "verified": true
+          },
+          {
+            "type": "documentation",
+            "url": "https://learn.microsoft.com/en-us/linkedin/",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "linkedin",
+      "is_workflow": true,
+      "workflow_id": "linkedin_agenda_highlights",
+      "parent_platform_id": "linkedin",
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": false
+      }
     },
     {
       "platform_id": "linkedin_executive_poll",
-      "platform_name": "LinkedIn — Executive poll",
+      "platform_name": "LinkedIn \u2014 Executive poll",
       "category": "linkedin_thought_leadership",
       "official_homepage": "https://www.linkedin.com",
       "verified_submission_url": null,
       "submission_method": "manual_or_official_api",
       "adapter_name": "linkedin",
       "authentication_method": "oauth",
-      "required_fields": ["event_title", "target_audience", "primary_keywords"],
-      "optional_fields": ["brand_voice"],
-      "supported_content_types": ["executive_poll", "linkedin_post"],
+      "required_fields": [
+        "event_title",
+        "target_audience",
+        "primary_keywords"
+      ],
+      "optional_fields": [
+        "brand_voice"
+      ],
+      "supported_content_types": [
+        "executive_poll",
+        "linkedin_post"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
       "documentation_url": "https://learn.microsoft.com/en-us/linkedin/",
-      "operational_notes": "Poll posting not live-tested."
+      "operational_notes": "Poll posting not live-tested.",
+      "credentials": {
+        "env_vars": [
+          "LINKEDIN_ACCESS_TOKEN"
+        ],
+        "optional_env_vars": [
+          "LINKEDIN_CLIENT_ID",
+          "LINKEDIN_CLIENT_SECRET",
+          "LINKEDIN_ORGANIZATION_URN"
+        ],
+        "auth_type": "oauth",
+        "required_for_live": true,
+        "docs_url": "https://learn.microsoft.com/en-us/linkedin/"
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.linkedin.com",
+            "verified": true
+          },
+          {
+            "type": "documentation",
+            "url": "https://learn.microsoft.com/en-us/linkedin/",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "linkedin",
+      "is_workflow": true,
+      "workflow_id": "linkedin_executive_poll",
+      "parent_platform_id": "linkedin",
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": false
+      }
     },
     {
       "platform_id": "linkedin_partner_spotlight",
-      "platform_name": "LinkedIn — Partner spotlight",
+      "platform_name": "LinkedIn \u2014 Partner spotlight",
       "category": "linkedin_thought_leadership",
       "official_homepage": "https://www.linkedin.com",
       "verified_submission_url": null,
       "submission_method": "manual_or_official_api",
       "adapter_name": "linkedin",
       "authentication_method": "oauth",
-      "required_fields": ["event_title", "partner_names", "landing_page_url"],
-      "optional_fields": ["partner_urls", "brand_voice"],
-      "supported_content_types": ["partner_spotlight", "linkedin_post"],
+      "required_fields": [
+        "event_title",
+        "partner_names",
+        "landing_page_url"
+      ],
+      "optional_fields": [
+        "partner_urls",
+        "brand_voice"
+      ],
+      "supported_content_types": [
+        "partner_spotlight",
+        "linkedin_post"
+      ],
       "automation_status": "NEEDS_VERIFICATION",
       "approval_required": true,
       "paid_submission_possible": false,
       "last_verified_at": null,
       "documentation_url": "https://learn.microsoft.com/en-us/linkedin/",
-      "operational_notes": "Draft generation only."
+      "operational_notes": "Draft generation only.",
+      "credentials": {
+        "env_vars": [
+          "LINKEDIN_ACCESS_TOKEN"
+        ],
+        "optional_env_vars": [
+          "LINKEDIN_CLIENT_ID",
+          "LINKEDIN_CLIENT_SECRET",
+          "LINKEDIN_ORGANIZATION_URN"
+        ],
+        "auth_type": "oauth",
+        "required_for_live": true,
+        "docs_url": "https://learn.microsoft.com/en-us/linkedin/"
+      },
+      "research": {
+        "researched_at": "2026-10-29",
+        "sources": [
+          {
+            "type": "official_homepage",
+            "url": "https://www.linkedin.com",
+            "verified": true
+          },
+          {
+            "type": "documentation",
+            "url": "https://learn.microsoft.com/en-us/linkedin/",
+            "verified": true
+          }
+        ],
+        "unknown_fields": [
+          "verified_submission_url"
+        ],
+        "notes": "Unknown fields left null; automation_status remains NEEDS_VERIFICATION until live-tested."
+      },
+      "distinct_platform_id": "linkedin",
+      "is_workflow": true,
+      "workflow_id": "linkedin_partner_spotlight",
+      "parent_platform_id": "linkedin",
+      "policy": {
+        "approval_required": true,
+        "dry_run_default": true,
+        "allow_live_without_ready": false,
+        "self_promo_restricted": false,
+        "paid_submission_possible": false
+      }
     }
   ]
 }

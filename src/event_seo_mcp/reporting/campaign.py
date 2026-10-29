@@ -44,11 +44,30 @@ class CampaignReporter:
         verified = sum(1 for b in backlinks if b.get("result") == "verified_link_found" or b.get("link_found") == 1)
         missing = sum(1 for b in backlinks if b.get("result") == "verified_missing_link")
 
+        distinct = [p for p in platforms if not p.is_workflow]
+        entries = [p for p in platforms if p.is_workflow or p.platform_id != "linkedin"]
+        workflows = [p for p in platforms if p.is_workflow]
+        by_category: dict[str, int] = {}
+        for p in entries:
+            by_category[p.category] = by_category.get(p.category, 0) + 1
+
         return {
             "event_id": event_id,
             "planned_submissions": len(jobs),
-            "eligible_platforms": sum(1 for p in platforms if p.automation_status != "BLOCKED"),
+            "eligible_platforms": sum(1 for p in entries if p.automation_status != "BLOCKED"),
             "platforms_total": len(platforms),
+            "registry": {
+                "distinct_platforms": len(distinct),
+                "registry_entries": len(entries),
+                "linkedin_workflows": len(workflows),
+                "categories": by_category,
+                "expected": {
+                    "distinct_platforms": 30,
+                    "registry_entries": 35,
+                    "linkedin_workflows": 6,
+                    "categories": 7,
+                },
+            },
             "successfully_submitted": by_state.get("SUBMITTED", 0) + by_state.get("PENDING_REVIEW", 0),
             "published_listings": by_state.get("PUBLISHED", 0),
             "pending_approvals": by_state.get("AWAITING_APPROVAL", 0),
@@ -62,6 +81,7 @@ class CampaignReporter:
             "registrations_conversions": None,
             "analytics_note": "Traffic/conversion metrics are null unless connected analytics data is provided. Never fabricated.",
             "strategy_targets": STRATEGY_TARGETS,
+            "dry_run_default": True,
         }
 
     def export(self, event_id: str | None = None, fmt: str = "json") -> dict[str, Any]:
