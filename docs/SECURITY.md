@@ -6,6 +6,9 @@
 - Use `.env.example` placeholders only (including empty `EVENTBRITE_API_TOKEN`).
 - Application logs and audit details pass through secret redaction (Bearer headers, `eventbrite_api_token`, provider keys).
 - Never send passwords, cookies, or access tokens to AI providers.
+- Google Sheets site passwords are not returned by tools or the HTTP bridge. Prefer `env:NAME` or `secret:NAME` cells. A legacy password cell is detected and discarded.
+- Do not commit service-account JSON. `GOOGLE_SHEETS_CREDENTIALS_JSON` and `GOOGLE_APPLICATION_CREDENTIALS` stay in the secret store.
+- The Gemini routes `/api/submission-targets`, `/api/submissions`, and `/api/publication-updates` require `MCP_AUTH_TOKEN` even on localhost.
 - Eventbrite live create uses the production API host only; never log the private token.
 
 ## HTTP deployment

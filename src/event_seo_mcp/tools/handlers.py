@@ -21,6 +21,7 @@ from event_seo_mcp.schemas.content import ContentType, GeneratedContent
 from event_seo_mcp.schemas.event import EventRecord
 from event_seo_mcp.settings import Settings, get_settings
 from event_seo_mcp.tracking.backlinks import BacklinkVerifier
+from event_seo_mcp.integrations.google_sheets.service import SheetsWorkflow
 from event_seo_mcp import __version__
 
 
@@ -32,6 +33,7 @@ class ToolService:
         self.capabilities = CapabilityRegistry(self.settings)
         self.reporter = CampaignReporter(repo)
         self.backlinks = BacklinkVerifier(repo, self.settings)
+        self.sheets = SheetsWorkflow(repo, self.settings, self.orchestrator)
         sync_platforms_to_db(repo, self.settings)
 
     def health_check(self) -> dict[str, Any]:
@@ -344,6 +346,59 @@ class ToolService:
 
     def check_adapter_health(self) -> dict[str, Any]:
         return self.capabilities.full_health()
+
+    def list_submission_targets(self) -> dict[str, Any]:
+        return self.sheets.list_targets()
+
+    def submit_event_to_site(
+        self,
+        *,
+        event_name: str,
+        event_description: str,
+        landing_page_url: str,
+        event_datetime: str,
+        target_site: str,
+        registration_url: str,
+        location: str | None = None,
+        virtual_event_details: str | None = None,
+        dry_run: bool | None = True,
+        authorize_publication: bool = False,
+        event_id: str | None = None,
+    ) -> dict[str, Any]:
+        return self.sheets.submit_event_to_site(
+            event_name=event_name,
+            event_description=event_description,
+            landing_page_url=landing_page_url,
+            event_datetime=event_datetime,
+            target_site=target_site,
+            registration_url=registration_url,
+            location=location,
+            virtual_event_details=virtual_event_details,
+            dry_run=dry_run,
+            authorize_publication=authorize_publication,
+            event_id=event_id,
+        )
+
+    def record_publication_update(
+        self,
+        *,
+        event_id: str,
+        publication_status: str,
+        site_name: str | None = None,
+        website: str | None = None,
+        published_url: str | None = None,
+        published_date: str | None = None,
+        external_submission_id: str | None = None,
+    ) -> dict[str, Any]:
+        return self.sheets.record_publication_update(
+            event_id=event_id,
+            publication_status=publication_status,
+            site_name=site_name,
+            website=website,
+            published_url=published_url,
+            published_date=published_date,
+            external_submission_id=external_submission_id,
+        )
 
     def load_example_event_if_needed(self) -> None:
         example = self.settings.repo_root / "data/events/example_event.json"

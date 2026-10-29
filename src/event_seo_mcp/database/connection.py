@@ -118,6 +118,20 @@ CREATE TABLE IF NOT EXISTS registry_snapshots (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS sheet_submission_links (
+    event_id TEXT NOT NULL,
+    site_key TEXT NOT NULL,
+    sheet_row INTEGER,
+    status TEXT NOT NULL,
+    website TEXT NOT NULL,
+    site_name TEXT NOT NULL,
+    append_uncertain INTEGER NOT NULL DEFAULT 0,
+    external_submission_id TEXT,
+    published_url TEXT,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (event_id, site_key)
+);
+
 CREATE INDEX IF NOT EXISTS idx_jobs_event ON submission_jobs(event_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_platform ON submission_jobs(platform_id);
 CREATE INDEX IF NOT EXISTS idx_content_event ON generated_content(event_id);

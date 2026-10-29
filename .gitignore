@@ -26,6 +26,8 @@ htmlcov/
 *.key
 credentials.json
 service-account*.json
+google-service-account.json
+*-service-account.json
 
 # Cursor MCP local overrides that may embed secrets
 .cursor/mcp.local.json

@@ -80,6 +80,35 @@ class Settings(BaseSettings):
         default="EventSeoMCP/0.1 (+https://github.com/eneelkant/event-off-page-seo-automation)"
     )
 
+    # Google Sheets (service account). Never log credential JSON.
+    google_sheets_spreadsheet_id: str | None = None
+    google_sheets_credentials_json: str | None = Field(default=None, repr=False)
+    google_application_credentials: str | None = None
+    google_sheets_credentials_tab: str = "Site Login Credentials"
+    google_sheets_submissions_tab: str = "Submissions"
+    google_sheets_timeout_seconds: float = 20.0
+
+    @field_validator(
+        "mcp_auth_token",
+        "ai_fallback_provider",
+        "openai_api_key",
+        "anthropic_api_key",
+        "gemini_api_key",
+        "skyvern_api_url",
+        "skyvern_api_key",
+        "eventbrite_api_token",
+        "eventbrite_organization_id",
+        "google_sheets_spreadsheet_id",
+        "google_sheets_credentials_json",
+        "google_application_credentials",
+        mode="before",
+    )
+    @classmethod
+    def _blank_optional_string(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
     @field_validator(
         "database_path",
         "platforms_config_path",
