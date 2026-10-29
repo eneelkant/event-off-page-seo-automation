@@ -27,6 +27,14 @@ htmlcov/
 credentials.json
 service-account*.json
 
+# Cursor MCP local overrides that may embed secrets
+.cursor/mcp.local.json
+.cursor/mcp.json.local
+.cursor/*.secret.json
+# Allow committed safe templates / env-interpolated project config:
+#   .cursor/mcp.json
+#   .cursor/mcp.json.example
+
 # Runtime data
 data/runtime/**
 !data/runtime/.gitkeep
