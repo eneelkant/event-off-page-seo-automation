@@ -1,61 +1,88 @@
 # Client setup
 
-## Local stdio (Cursor / Claude Desktop)
+## Production remote MCP (Cursor) — recommended
 
-1. Create a virtualenv and install the package.
-2. Copy `.env.example` → `.env` and set `MCP_TRANSPORT=stdio`.
-3. Point the client at:
+Hosted endpoint: `https://event-seo-mcp.fly.dev/mcp`
+
+Project config is in [`.cursor/mcp.json`](../.cursor/mcp.json) (safe to commit — uses env interpolation, no hardcoded token):
+
+```json
+{
+  "mcpServers": {
+    "event-off-page-seo": {
+      "url": "https://event-seo-mcp.fly.dev/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:MCP_AUTH_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+Cursor officially resolves `${env:NAME}` in `url` and `headers` ([Cursor MCP docs](https://cursor.com/docs/mcp)).
+
+### Make the token available to Cursor
+
+1. Export in your shell (do not commit):
+   ```bash
+   export MCP_AUTH_TOKEN="$(cat /path/to/secret)"   # or your password manager
+   ```
+2. **Launch Cursor from that same shell** (`cursor .`) so the desktop process inherits the variable.
+3. If you start Cursor from a desktop icon, shell RC exports may not apply. Then either:
+   - set `MCP_AUTH_TOKEN` in a system/user environment that GUI apps see, or
+   - use the **stdio proxy fallback** below.
+
+### Manual Cursor UI steps
+
+1. Open this repo in Cursor.
+2. Ensure `.cursor/mcp.json` is present (committed) and `MCP_AUTH_TOKEN` is in the environment Cursor inherits.
+3. Open **Customize → MCP** (or Settings → MCP) and confirm `event-off-page-seo` appears and is enabled.
+4. Check **Output → MCP Logs** if the server fails to connect (401 usually means missing/unresolved token).
+5. In chat, ask to run `health_check` (read-only). Do not run submit tools unless intentional.
+
+### Stdio proxy fallback (when header `${env:…}` does not resolve)
+
+Cursor staff note that remote header interpolation can fail if the GUI process lacks the env var; stdio `env` interpolation still works because Cursor launches the command ([forum](https://forum.cursor.com/t/config-interpolation-env-name-not-working-in-headers-for-remote-mcp-servers/156069)).
+
+Use the `event-off-page-seo-stdio-proxy` entry from `.cursor/mcp.json.example`, or:
+
+```json
+{
+  "mcpServers": {
+    "event-off-page-seo": {
+      "command": "python",
+      "args": ["${workspaceFolder}/scripts/cursor_remote_mcp_proxy.py"],
+      "env": {
+        "MCP_REMOTE_URL": "https://event-seo-mcp.fly.dev/mcp",
+        "MCP_AUTH_TOKEN": "${env:MCP_AUTH_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+Requires the project venv on `PATH` (`python` with `mcp` installed) or point `command` at `.venv/bin/python`.
+
+## Local stdio (no remote host)
+
+See `.cursor/mcp.json.example` → `event-off-page-seo-stdio-local`.
 
 ```bash
-python -m event_seo_mcp.server
+MCP_TRANSPORT=stdio python -m event_seo_mcp.server
 ```
 
-See `.cursor/mcp.json.example` for a Cursor-ready snippet (`uv run` recommended).
+## Auth reminder
 
-## Streamable HTTP
+- Production `/mcp` requires `Authorization: Bearer <MCP_AUTH_TOKEN>`.
+- `GET /healthz` is public for probes.
+- Never commit real tokens. Prefer `${env:MCP_AUTH_TOKEN}`.
+- Dry-run remains the server default.
+
+## Verify without Cursor UI
 
 ```bash
-export MCP_TRANSPORT=streamable-http
-export MCP_HTTP_HOST=127.0.0.1
-export MCP_HTTP_PORT=8000
-python -m event_seo_mcp.server --http
+export MCP_AUTH_TOKEN=...   # from your secret store
+python scripts/verify_remote_mcp.py
 ```
 
-Clients connect to `http://127.0.0.1:8000/mcp`.
-
-For remote deployment:
-
-- Set `MCP_ALLOW_REMOTE_BIND=true`
-- Set a strong `MCP_AUTH_TOKEN`
-- Terminate TLS at a reverse proxy
-- Do not expose write-capable MCP without authentication
-
-## ChatGPT / remote MCP notes
-
-- Provide a hosted Streamable HTTP endpoint with auth.
-- Not every ChatGPT plan/interface supports unrestricted write-capable custom MCP apps.
-- Prefer dry-run tools until the client path is confirmed.
-
-## Gemini
-
-- Gemini consumer apps may not connect directly to arbitrary custom MCP servers.
-- Supported route in this project: configure `AI_PROVIDER=gemini` for content generation, and/or call the same MCP tools from an MCP-compatible client that Gemini can use via tool-calling.
-- Do not assume the Gemini consumer app can attach this server natively.
-
-## Claude remote
-
-- Use Streamable HTTP with authentication when deploying remotely.
-- Keep publication tools dry-run by default.
-
-
-## Production Streamable HTTP auth
-
-Production deployments require `MCP_AUTH_TOKEN`. Clients must send:
-
-```
-Authorization: Bearer <MCP_AUTH_TOKEN>
-```
-
-`GET /healthz` is unauthenticated for load-balancer probes. The MCP endpoint `/mcp` rejects missing/invalid tokens with HTTP 401.
-
-See `docs/DEPLOY.md` for Fly.io / Docker hosting steps.
+This checks `/healthz`, rejects unauthenticated `/mcp`, lists tools, and calls **only** `health_check`.

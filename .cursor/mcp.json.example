@@ -1,11 +1,17 @@
 {
   "mcpServers": {
     "event-off-page-seo": {
+      "url": "https://event-seo-mcp.fly.dev/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:MCP_AUTH_TOKEN}"
+      }
+    },
+    "event-off-page-seo-stdio-local": {
       "command": "uv",
       "args": [
         "run",
         "--directory",
-        "/absolute/path/to/event-off-page-seo-automation",
+        "${workspaceFolder}",
         "python",
         "-m",
         "event_seo_mcp.server"
@@ -15,6 +21,16 @@
         "AI_PROVIDER": "template",
         "DRY_RUN_DEFAULT": "true",
         "DATABASE_PATH": "data/runtime/event_seo.db"
+      }
+    },
+    "event-off-page-seo-stdio-proxy": {
+      "command": "python",
+      "args": [
+        "${workspaceFolder}/scripts/cursor_remote_mcp_proxy.py"
+      ],
+      "env": {
+        "MCP_REMOTE_URL": "https://event-seo-mcp.fly.dev/mcp",
+        "MCP_AUTH_TOKEN": "${env:MCP_AUTH_TOKEN}"
       }
     }
   }
