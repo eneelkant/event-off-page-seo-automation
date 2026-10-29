@@ -7,9 +7,15 @@ from pathlib import Path
 from typing import Any
 
 from event_seo_mcp.database.repository import Repository
-from event_seo_mcp.discovery.platform_discovery import discover_platform, load_platforms_file, sync_platforms_to_db
+from event_seo_mcp.discovery.platform_discovery import (
+    discover_platform,
+    load_platforms_file,
+    registry_stats,
+    sync_platforms_to_db,
+)
 from event_seo_mcp.orchestration.capability_registry import CapabilityRegistry
 from event_seo_mcp.orchestration.orchestrator import Orchestrator
+from event_seo_mcp.orchestration.publishing_rules import PublishingRulesEngine, credential_presence
 from event_seo_mcp.reporting.campaign import CampaignReporter
 from event_seo_mcp.schemas.content import ContentType, GeneratedContent
 from event_seo_mcp.schemas.event import EventRecord
@@ -40,21 +46,106 @@ class ToolService:
             "providers": self.capabilities.full_health()["providers"],
         }
 
-    def list_platforms(self, category: str | None = None) -> dict[str, Any]:
-        platforms = self.repo.list_platforms()
+    def list_platforms(
+        self, category: str | None = None, *, include_workflows: bool = False
+    ) -> dict[str, Any]:
+        """List distinct platforms (30). Set include_workflows for DB rows including workflows."""
+        if include_workflows:
+            platforms = self.repo.list_platforms()
+        else:
+            platforms = self.repo.list_distinct_platforms()
         if category:
             platforms = [p for p in platforms if p.category == category]
         return {
             "count": len(platforms),
+            "include_workflows": include_workflows,
             "platforms": [p.model_dump(mode="json") for p in platforms],
         }
+
+    def list_registry_entries(self, category: str | None = None) -> dict[str, Any]:
+        entries = self.repo.list_registry_entries()
+        if category:
+            entries = [e for e in entries if e.category == category]
+        return {
+            "count": len(entries),
+            "expected": 35,
+            "entries": [e.model_dump(mode="json") for e in entries],
+        }
+
+    def list_workflows(self, parent_platform_id: str | None = "linkedin") -> dict[str, Any]:
+        workflows = self.repo.list_workflows(parent_platform_id=parent_platform_id)
+        return {
+            "count": len(workflows),
+            "parent_platform_id": parent_platform_id,
+            "workflows": [w.model_dump(mode="json") for w in workflows],
+        }
+
+    def get_registry_stats(self) -> dict[str, Any]:
+        stats = registry_stats(self.settings.resolved_platforms_path)
+        self.repo.save_registry_snapshot(
+            version=str(stats.get("version")),
+            totals=stats.get("totals") or {},
+            validation=stats.get("validation") or {},
+        )
+        return stats
 
     def get_platform_details(self, platform_id: str) -> dict[str, Any]:
         platform = self.repo.get_platform(platform_id)
         if not platform:
             return {"error": "not_found", "platform_id": platform_id}
         selection = self.capabilities.select_adapter(platform)
-        return {"platform": platform.model_dump(mode="json"), "adapter_selection": selection}
+        return {
+            "platform": platform.model_dump(mode="json"),
+            "adapter_selection": selection,
+            "credentials": credential_presence(platform),
+            "research": platform.research.model_dump(mode="json"),
+        }
+
+    def get_credential_status(self, platform_id: str | None = None) -> dict[str, Any]:
+        if platform_id:
+            platform = self.repo.get_platform(platform_id)
+            if not platform:
+                return {"error": "not_found", "platform_id": platform_id}
+            return {"count": 1, "credentials": [credential_presence(platform)]}
+        items = [credential_presence(p) for p in self.repo.list_registry_entries()]
+        return {
+            "count": len(items),
+            "configured_count": sum(1 for i in items if i["configured"]),
+            "credentials": items,
+        }
+
+    def evaluate_publishing_rules(
+        self,
+        platform_id: str,
+        event_id: str | None = None,
+        *,
+        dry_run: bool | None = None,
+        authorize_publication: bool = False,
+    ) -> dict[str, Any]:
+        platform = self.repo.get_platform(platform_id)
+        if not platform:
+            return {"error": "not_found", "platform_id": platform_id}
+        event = None
+        if event_id:
+            event = self.repo.get_event(event_id)
+            if not event:
+                return {"error": "event_not_found", "event_id": event_id}
+        if dry_run is None:
+            dry_run = self.settings.dry_run_default
+        engine = PublishingRulesEngine(self.settings)
+        decision = engine.evaluate(
+            event, platform, dry_run=dry_run, authorize_publication=authorize_publication
+        )
+        evaluation_id = self.repo.save_publishing_rule_evaluation(
+            platform_id=platform_id,
+            event_id=event_id,
+            dry_run=decision.dry_run,
+            authorize_publication=authorize_publication,
+            allowed=decision.allowed,
+            eligible_for_live=decision.eligible_for_live,
+            result=decision.as_dict(),
+        )
+        return {"evaluation_id": evaluation_id, **decision.as_dict()}
 
     async def discover_platform_submission(self, platform_id: str) -> dict[str, Any]:
         platform = self.repo.get_platform(platform_id)
@@ -110,7 +201,7 @@ class ToolService:
 
     def generate_campaign_content(self, event_id: str, platform_ids: list[str] | None = None) -> dict[str, Any]:
         event = self._require_event(event_id)
-        platforms = self.repo.list_platforms()
+        platforms = self.repo.list_registry_entries()
         if platform_ids:
             platforms = [p for p in platforms if p.platform_id in platform_ids]
         items = []
@@ -196,7 +287,7 @@ class ToolService:
                 "refused": True,
                 "message": "Campaign live submit requires authorize_publication=true; defaulting refusal.",
             }
-        platforms = self.repo.list_platforms()
+        platforms = self.repo.list_registry_entries()
         if platform_ids:
             platforms = [p for p in platforms if p.platform_id in platform_ids]
         results = []

@@ -98,10 +98,31 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS publishing_rule_evaluations (
+    evaluation_id TEXT PRIMARY KEY,
+    event_id TEXT,
+    platform_id TEXT NOT NULL,
+    dry_run INTEGER NOT NULL,
+    authorize_publication INTEGER NOT NULL,
+    allowed INTEGER NOT NULL,
+    eligible_for_live INTEGER NOT NULL,
+    result_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS registry_snapshots (
+    snapshot_id TEXT PRIMARY KEY,
+    version TEXT NOT NULL,
+    totals_json TEXT NOT NULL,
+    validation_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_jobs_event ON submission_jobs(event_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_platform ON submission_jobs(platform_id);
 CREATE INDEX IF NOT EXISTS idx_content_event ON generated_content(event_id);
 CREATE INDEX IF NOT EXISTS idx_backlinks_event ON backlink_checks(event_id);
+CREATE INDEX IF NOT EXISTS idx_rule_eval_platform ON publishing_rule_evaluations(platform_id);
 """
 
 

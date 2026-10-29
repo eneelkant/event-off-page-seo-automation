@@ -7,6 +7,7 @@ from typing import Any
 from event_seo_mcp.adapters.registry import get_adapter
 from event_seo_mcp.database.repository import Repository
 from event_seo_mcp.orchestration.capability_registry import CapabilityRegistry
+from event_seo_mcp.orchestration.publishing_rules import PublishingRulesEngine
 from event_seo_mcp.providers.factory import generate_with_failover
 from event_seo_mcp.schemas.content import ContentType, GeneratedContent
 from event_seo_mcp.schemas.event import EventRecord
@@ -20,6 +21,7 @@ class Orchestrator:
         self.repo = repo
         self.settings = settings or get_settings()
         self.capabilities = CapabilityRegistry(self.settings)
+        self.publishing_rules = PublishingRulesEngine(self.settings)
 
     def generate_content(
         self,
@@ -79,6 +81,10 @@ class Orchestrator:
     def check_eligibility(self, event: EventRecord, platform: PlatformRecord) -> dict[str, Any]:
         missing = event.missing_fields_for(platform.required_fields)
         selection = self.capabilities.select_adapter(platform)
+        dry = self.publishing_rules.evaluate(event, platform, dry_run=True, authorize_publication=False)
+        live = self.publishing_rules.evaluate(
+            event, platform, dry_run=False, authorize_publication=True
+        )
         blocked_reasons: list[str] = []
         if platform.automation_status == "BLOCKED":
             blocked_reasons.append("platform_blocked")
@@ -86,14 +92,23 @@ class Orchestrator:
             blocked_reasons.append("platform_needs_verification_for_live")
         if missing:
             blocked_reasons.append("missing_required_fields")
+        if live.missing_credentials:
+            blocked_reasons.append("missing_credentials")
         return {
-            "eligible_for_dry_run": not missing,
-            "eligible_for_live": False,
+            "eligible_for_dry_run": dry.eligible_for_dry_run,
+            "eligible_for_live": live.eligible_for_live,
             "missing_fields": missing,
             "blocked_reasons": blocked_reasons,
             "approval_required": platform.approval_required,
             "adapter_selection": selection,
             "automation_status": platform.automation_status,
+            "publishing_rules_dry_run": dry.as_dict(),
+            "publishing_rules_live_authorized": live.as_dict(),
+            "credentials": {
+                "required_env_vars": platform.credentials.env_vars,
+                "missing_for_live": live.missing_credentials,
+                "values_redacted": True,
+            },
         }
 
     def submit_event(
@@ -108,16 +123,20 @@ class Orchestrator:
         if dry_run is None:
             dry_run = self.settings.dry_run_default
 
+        decision = self.publishing_rules.evaluate(
+            event,
+            platform,
+            dry_run=dry_run,
+            authorize_publication=authorize_publication,
+        )
         # Never silently switch from preview/dry-run to live execution.
-        if not dry_run and self.settings.require_publication_authorization and not authorize_publication:
+        if not dry_run and not decision.allowed:
             return {
                 "duplicate": False,
                 "refused": True,
-                "message": (
-                    "Live publication refused: set authorize_publication=true explicitly. "
-                    "Tools never silently switch from dry-run/preview to live execution."
-                ),
+                "message": "; ".join(decision.reasons),
                 "dry_run": False,
+                "publishing_rules": decision.as_dict(),
             }
 
         idem = Repository.make_idempotency_key(

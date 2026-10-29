@@ -3,9 +3,10 @@
 ## Secrets
 
 - Keep `.env` out of Git (see `.gitignore`).
-- Use `.env.example` placeholders only.
-- Application logs and audit details pass through secret redaction.
+- Use `.env.example` placeholders only (including empty `EVENTBRITE_API_TOKEN`).
+- Application logs and audit details pass through secret redaction (Bearer headers, `eventbrite_api_token`, provider keys).
 - Never send passwords, cookies, or access tokens to AI providers.
+- Eventbrite live create uses the production API host only; never log the private token.
 
 ## HTTP deployment
 

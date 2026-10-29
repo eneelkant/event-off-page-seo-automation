@@ -16,14 +16,49 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
         return service.health_check()
 
     @mcp.tool()
-    def list_platforms(category: str | None = None) -> dict[str, Any]:
-        """List platforms from the registry, optionally filtered by category."""
-        return service.list_platforms(category)
+    def list_platforms(category: str | None = None, include_workflows: bool = False) -> dict[str, Any]:
+        """List distinct platforms (30). Set include_workflows=true to include workflow rows."""
+        return service.list_platforms(category, include_workflows=include_workflows)
+
+    @mcp.tool()
+    def list_registry_entries(category: str | None = None) -> dict[str, Any]:
+        """List 35 registry submit entries (29 non-LinkedIn platforms + 6 LinkedIn workflows)."""
+        return service.list_registry_entries(category)
+
+    @mcp.tool()
+    def list_workflows(parent_platform_id: str | None = "linkedin") -> dict[str, Any]:
+        """List workflows for a parent platform (LinkedIn = 6 thought-leadership workflows)."""
+        return service.list_workflows(parent_platform_id)
+
+    @mcp.tool()
+    def get_registry_stats() -> dict[str, Any]:
+        """Validate registry totals: 35 entries / 7 categories / 30 platforms / 6 LinkedIn workflows."""
+        return service.get_registry_stats()
 
     @mcp.tool()
     def get_platform_details(platform_id: str) -> dict[str, Any]:
-        """Get one platform record and selected adapter capability details."""
+        """Get platform/workflow record, adapter selection, credential presence, and research."""
         return service.get_platform_details(platform_id)
+
+    @mcp.tool()
+    def get_credential_status(platform_id: str | None = None) -> dict[str, Any]:
+        """Report which credential env vars are present (secret values never returned)."""
+        return service.get_credential_status(platform_id)
+
+    @mcp.tool()
+    def evaluate_publishing_rules(
+        platform_id: str,
+        event_id: str | None = None,
+        dry_run: bool | None = None,
+        authorize_publication: bool = False,
+    ) -> dict[str, Any]:
+        """Evaluate publishing rules for dry-run or live submit (persists evaluation; no publish)."""
+        return service.evaluate_publishing_rules(
+            platform_id,
+            event_id,
+            dry_run=dry_run,
+            authorize_publication=authorize_publication,
+        )
 
     @mcp.tool()
     async def discover_platform_submission(platform_id: str) -> dict[str, Any]:

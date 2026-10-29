@@ -62,6 +62,18 @@ class Settings(BaseSettings):
     skyvern_api_url: str | None = None
     skyvern_api_key: str | None = None
 
+    # Eventbrite API (official v3). Private OAuth token from API Keys page.
+    # Docs: https://www.eventbrite.com/platform/docs/authentication
+    # Create: POST /v3/organizations/{organization_id}/events/
+    eventbrite_api_token: str | None = None
+    eventbrite_organization_id: str | None = None
+    eventbrite_currency: str = "USD"
+    # When true and live submit is authorized, also POST /v3/events/{id}/publish/.
+    # Default false: create draft event (+ ticket class) only.
+    eventbrite_publish_on_create: bool = False
+    eventbrite_api_base_url: str = "https://www.eventbriteapi.com/v3"
+    eventbrite_timeout_seconds: float = 30.0
+
     backlink_max_redirects: int = 5
     backlink_timeout_seconds: int = 20
     backlink_user_agent: str = Field(
