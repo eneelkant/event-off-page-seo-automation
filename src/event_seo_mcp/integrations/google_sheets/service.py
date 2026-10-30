@@ -126,6 +126,22 @@ class SheetsWorkflow:
         registration = valid_http_url(registration_url) or ""
         when = _parse_datetime(event_datetime)
         identifier = make_event_id(event_id, event_name, landing or landing_page_url)
+        if problems or when is None:
+            message = "; ".join(problems or ["event_datetime must be an ISO-8601 date and time"])
+            logger.info(
+                "sheets_submit validation_failed event_id=%s tracked=false detail=%s",
+                identifier,
+                message,
+            )
+            return {
+                "error": "validation_error",
+                "message": message,
+                "event_id": identifier,
+                "dry_run": dry_run,
+                "published": False,
+                "tracked": False,
+                "sheet_row": None,
+            }
 
         try:
             target = self._resolve_target(target_site)
@@ -140,28 +156,6 @@ class SheetsWorkflow:
             }
         if isinstance(target, dict) and target.get("error"):
             return target
-
-        if problems or when is None:
-            message = "; ".join(problems or ["event_datetime must be an ISO-8601 date and time"])
-            tracked = self._write_tracking(
-                event_id=identifier,
-                target=target,
-                status="FAILED",
-                published_url=None,
-                published_date=None,
-            )
-            if tracked.get("error"):
-                tracked["event_id"] = identifier
-                return tracked
-            return {
-                "error": "validation_error",
-                "message": message,
-                "event_id": identifier,
-                "status": "FAILED",
-                "dry_run": dry_run,
-                "published": False,
-                "sheet_row": tracked.get("sheet_row"),
-            }
 
         if dry_run:
             tracked = self._write_tracking(
