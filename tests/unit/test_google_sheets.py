@@ -59,12 +59,15 @@ class FakeSheets:
         self.credentials = [list(row) for row in CREDENTIALS]
         self.submissions = [list(row) for row in SUBMISSIONS]
         self.append_calls = 0
+        self.reads = 0
+        self.writes = 0
         self.timeout_once = False
         self.timeout_keeps_row = False
         self.fail_configured = False
         self.api_error = False
 
     def get_values(self, range_name: str) -> list[list[str]]:
+        self.reads += 1
         if self.fail_configured:
             raise SheetsNotConfigured("GOOGLE_SHEETS_SPREADSHEET_ID is not set")
         if range_name.endswith("!A:F"):
@@ -78,6 +81,7 @@ class FakeSheets:
         return [list(row) for row in self.submissions]
 
     def update_row(self, range_name: str, row: list[str]) -> None:
+        self.writes += 1
         number = int(re.search(r"!A(\d+)", range_name).group(1))
         while len(self.submissions) < number:
             self.submissions.append([""] * 7)
@@ -85,6 +89,7 @@ class FakeSheets:
 
     def append_row(self, range_name: str, row: list[str]) -> str:
         self.append_calls += 1
+        self.writes += 1
         if self.api_error:
             raise SheetsApiError(500, "append")
         if self.timeout_once:
@@ -99,6 +104,40 @@ class FakeSheets:
 
 def _dump(payload: object) -> str:
     return json.dumps(payload)
+
+
+def _block_adapter(service: ToolService) -> dict[str, int]:
+    calls = {"count": 0}
+
+    def _boom(*_args, **_kwargs):
+        calls["count"] += 1
+        raise AssertionError("publication adapter must not run")
+
+    service.sheets._dispatch_authorized_api = _boom  # type: ignore[method-assign]
+    return calls
+
+
+def _submission_json(**overrides: object) -> dict[str, object]:
+    body: dict[str, object] = {
+        "event_name": "Builders Summit",
+        "event_description": "A fictional event used only in tests.",
+        "landing_page_url": "https://example.com/events/builders",
+        "event_datetime": "2027-06-15T09:00:00Z",
+        "target_site": "https://10times.com",
+        "registration_url": "https://example.com/events/builders/register",
+        "location": "San Francisco",
+        "event_id": "evt-regression-1",
+        "dry_run": True,
+    }
+    body.update(overrides)
+    return body
+
+
+def _http_app(settings: Settings, service: ToolService, token: str | None):
+    settings.mcp_auth_token = token
+    database = Database(settings.resolved_database_path)
+    mcp, _ = create_server(settings, database=database)
+    return build_http_app(mcp, settings, service)
 
 
 def _submit(service: ToolService, **overrides: object) -> dict:
@@ -663,6 +702,167 @@ def test_http_bridge_requires_auth_and_updates(
         )
         assert published.status_code == 200
         assert published.json()["status"] == "PUBLISHED"
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected_message"),
+    [
+        (
+            {"location": None, "virtual_event_details": "  ", "event_id": "evt-no-place"},
+            "location or virtual_event_details is required",
+        ),
+        (
+            {"landing_page_url": "notaurl", "event_id": "evt-bad-landing"},
+            "landing_page_url must be an http or https URL",
+        ),
+        (
+            {"registration_url": "javascript:alert(1)", "event_id": "evt-bad-registration"},
+            "registration_url must be an http or https URL",
+        ),
+        (
+            {"event_datetime": "15/06/2027", "event_id": "evt-bad-when"},
+            "event_datetime must be an ISO-8601 date and time",
+        ),
+    ],
+)
+def test_invalid_submission_does_not_access_sheets(
+    settings: Settings,
+    sheets_service: tuple[ToolService, FakeSheets],
+    overrides: dict[str, object],
+    expected_message: str,
+) -> None:
+    service, fake = sheets_service
+    calls = _block_adapter(service)
+    app = _http_app(settings, service, "bridge-token")
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/submissions",
+            headers={"Authorization": "Bearer bridge-token"},
+            json=_submission_json(**overrides),
+        )
+    body = response.json()
+    assert response.status_code == 400
+    assert body["error"] == "validation_error"
+    assert expected_message in body["message"]
+    assert body["tracked"] is False
+    assert body["sheet_row"] is None
+    assert body["published"] is False
+    assert "status" not in body
+    assert fake.reads == 0
+    assert fake.writes == 0
+    assert fake.append_calls == 0
+    assert len(fake.submissions) == 1
+    assert calls["count"] == 0
+
+
+def test_missing_required_fields_do_not_access_sheets(
+    settings: Settings, sheets_service: tuple[ToolService, FakeSheets]
+) -> None:
+    service, fake = sheets_service
+    calls = _block_adapter(service)
+    app = _http_app(settings, service, "bridge-token")
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/submissions",
+            headers={"Authorization": "Bearer bridge-token"},
+            json={
+                "event_name": " ",
+                "event_description": "",
+                "landing_page_url": "",
+                "event_datetime": "",
+                "target_site": "",
+                "registration_url": "",
+                "dry_run": True,
+                "authorize_publication": True,
+                "event_id": "evt-missing-fields",
+            },
+        )
+    body = response.json()
+    assert response.status_code == 400
+    assert body["error"] == "validation_error"
+    assert body["tracked"] is False
+    assert body["sheet_row"] is None
+    for field in (
+        "event_name is required",
+        "event_description is required",
+        "landing_page_url must be an http or https URL",
+        "event_datetime must be an ISO-8601 date and time",
+        "registration_url must be an http or https URL",
+        "location or virtual_event_details is required",
+        "target_site is required",
+    ):
+        assert field in body["message"]
+    assert fake.reads == 0
+    assert fake.writes == 0
+    assert calls["count"] == 0
+    assert len(fake.submissions) == 1
+
+
+@pytest.mark.parametrize(
+    ("event_id", "extra"),
+    [
+        ("evt-dry-location", {"location": "San Francisco"}),
+        ("evt-dry-virtual", {"virtual_event_details": "Zoom room 12"}),
+    ],
+)
+def test_dry_run_with_authorization_still_does_not_publish(
+    settings: Settings,
+    sheets_service: tuple[ToolService, FakeSheets],
+    event_id: str,
+    extra: dict[str, str],
+) -> None:
+    service, fake = sheets_service
+    calls = _block_adapter(service)
+    app = _http_app(settings, service, "bridge-token")
+    payload = _submission_json(event_id=event_id, dry_run=True, authorize_publication=True)
+    payload.pop("location", None)
+    payload.update(extra)
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/submissions",
+            headers={"Authorization": "Bearer bridge-token"},
+            json=payload,
+        )
+    body = response.json()
+    assert response.status_code == 200
+    assert body["status"] == "DRY_RUN"
+    assert body["dry_run"] is True
+    assert body["published"] is False
+    assert body["sheet_row"] == 2
+    assert fake.append_calls == 1
+    assert fake.writes == 1
+    assert len(fake.submissions) == 2
+    assert fake.submissions[1][2] == "DRY_RUN"
+    assert fake.submissions[1][3] == ""
+    assert fake.submissions[1][6] == ""
+    assert calls["count"] == 0
+
+
+@pytest.mark.parametrize(
+    ("headers", "status_code", "error"),
+    [
+        ({}, 401, "unauthorized"),
+        ({"Authorization": "Bearer wrong-token"}, 401, "unauthorized"),
+    ],
+)
+def test_auth_failure_does_not_access_sheets(
+    settings: Settings,
+    sheets_service: tuple[ToolService, FakeSheets],
+    headers: dict[str, str],
+    status_code: int,
+    error: str,
+) -> None:
+    service, fake = sheets_service
+    calls = _block_adapter(service)
+    app = _http_app(settings, service, "bridge-token")
+    with TestClient(app) as client:
+        response = client.post("/api/submissions", headers=headers, json=_submission_json())
+    assert response.status_code == status_code
+    assert response.json()["error"] == error
+    assert fake.reads == 0
+    assert fake.writes == 0
+    assert calls["count"] == 0
+    assert len(fake.submissions) == 1
 
 
 def test_http_bridge_without_token_is_unavailable(settings: Settings, tmp_path) -> None:
