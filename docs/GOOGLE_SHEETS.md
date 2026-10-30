@@ -64,7 +64,7 @@ Official API tokens such as `EVENTBRITE_API_TOKEN` stay in environment variables
 
 - Eventbrite is the only registry adapter that calls a documented official API. A live call still needs `dry_run=false`, `authorize_publication=true`, `EVENTBRITE_API_TOKEN`, and `EVENTBRITE_ORGANIZATION_ID`. The existing publishing rules apply. A draft without a public URL is `SUBMITTED`, not `PUBLISHED`.
 - Every other site, including browser and editorial targets, returns `MANUAL_ACTION_REQUIRED` with instructions. The server does not submit those forms and does not type stored passwords into them.
-- Dry-run validates the event, writes `DRY_RUN`, and does not contact the site.
+- Dry-run validates the event first. A valid dry-run writes one `DRY_RUN` row and does not contact the site. A validation failure returns `validation_error` and does not append or update a tracking row.
 
 `submit_event_to_site` fields:
 
@@ -78,6 +78,28 @@ Official API tokens such as `EVENTBRITE_API_TOKEN` stay in environment variables
 - `dry_run` (default `true`)
 - `authorize_publication` (default `false`; ignored while dry-run is true)
 - `event_id` (optional stable id; otherwise one is derived and returned)
+
+`event_name`, `event_description`, `landing_page_url`, `event_datetime`, `registration_url`, and `target_site` are required. One of `location` or `virtual_event_details` is required. URLs must be `http` or `https` with no embedded username or password. `event_datetime` must be ISO-8601, including a time.
+
+Validation runs before any spreadsheet write. The HTTP bridge returns `400` with `error` set to `validation_error`, `tracked` set to `false`, and `sheet_row` set to `null`. That response is not a submission. `sheet_row` is only present with a number after the Sheets API accepts an append or update. It is the 1-based row on `Submissions` (row 1 is the header, so the first tracked attempt is row 2). It is not a placeholder.
+
+A later valid request for the same event and site updates that tracked row. It does not turn an earlier validation error into a row, because the invalid request never created one.
+
+## Tracking and errors
+
+| Response | HTTP status | Spreadsheet write |
+| --- | --- | --- |
+| `validation_error` | 400 | None. Fields were rejected before tracking. |
+| `target_not_found` | 404 | None. No credentials row matched the site. |
+| `sheets_not_configured` | 503 | None. Spreadsheet id or credentials are missing. |
+| `sheets_timeout` | 504 | Uncertain. The append may have landed; a retry adopts one matching unclaimed row instead of guessing. |
+| `sheets_api_error` or `sheets_error` | 400 | None when the API rejects the call before accepting the row. |
+| `DRY_RUN` | 200 | One `Submissions` row, or an update of the existing event+site row. Published Date and Published URL stay empty. |
+| `submission_not_found` | 404 | None. Publication update did not match a tracked event and site. |
+
+`published: false` means the site was not marked published. It does not by itself mean the spreadsheet was left unchanged. Use `tracked` and `sheet_row` on validation errors, and the `Submissions` status on a successful dry-run.
+
+Safe test: omit `dry_run` or set it to `true`, do not send `authorize_publication`, and use a fictional event. Expect `status` `DRY_RUN`, `published` `false`, and a real `sheet_row`. A validation error keeps `sheet_row` null. A numeric `sheet_row` means a `Submissions` row was written.
 
 ## Publication updates
 
@@ -122,7 +144,24 @@ curl -fsS http://127.0.0.1:8000/api/submissions \
     "location": "San Francisco",
     "registration_url": "https://example.com/events/example/register",
     "target_site": "https://10times.com",
+    "dry_run": true,
     "event_id": "evt-example-1"
+  }'
+
+# Same dry-run shape when the event has no physical location.
+curl -fsS http://127.0.0.1:8000/api/submissions \
+  -H "Authorization: Bearer $MCP_AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_name": "Example Summit",
+    "event_description": "Fictional event for a dry-run.",
+    "landing_page_url": "https://example.com/events/example",
+    "event_datetime": "2027-06-15T09:00:00Z",
+    "virtual_event_details": "Zoom room 12",
+    "registration_url": "https://example.com/events/example/register",
+    "target_site": "https://10times.com",
+    "dry_run": true,
+    "event_id": "evt-example-virtual"
   }'
 
 curl -fsS http://127.0.0.1:8000/api/publication-updates \

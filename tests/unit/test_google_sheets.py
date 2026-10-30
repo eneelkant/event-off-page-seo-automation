@@ -9,7 +9,11 @@ import pytest
 from starlette.testclient import TestClient
 
 from event_seo_mcp.database.connection import Database
-from event_seo_mcp.integrations.google_sheets.client import SheetsNotConfigured, SheetsTimeoutError
+from event_seo_mcp.integrations.google_sheets.client import (
+    SheetsApiError,
+    SheetsNotConfigured,
+    SheetsTimeoutError,
+)
 from event_seo_mcp.integrations.google_sheets.service import classify_password, valid_http_url
 from event_seo_mcp.server import build_http_app, create_server
 from event_seo_mcp.settings import Settings, reset_settings_cache
@@ -58,6 +62,7 @@ class FakeSheets:
         self.timeout_once = False
         self.timeout_keeps_row = False
         self.fail_configured = False
+        self.api_error = False
 
     def get_values(self, range_name: str) -> list[list[str]]:
         if self.fail_configured:
@@ -80,6 +85,8 @@ class FakeSheets:
 
     def append_row(self, range_name: str, row: list[str]) -> str:
         self.append_calls += 1
+        if self.api_error:
+            raise SheetsApiError(500, "append")
         if self.timeout_once:
             self.timeout_once = False
             if self.timeout_keeps_row:
@@ -201,6 +208,7 @@ def test_dry_run_is_default_and_does_not_publish(sheets_service: tuple[ToolServi
     assert result["status"] == "DRY_RUN"
     assert result["dry_run"] is True
     assert result["published"] is False
+    assert result["sheet_row"] == 2
     assert called["live"] == 0
     assert fake.append_calls == 1
     assert fake.submissions[1][2] == "DRY_RUN"
@@ -218,13 +226,127 @@ def test_string_false_dry_run_is_not_live(sheets_service: tuple[ToolService, Fak
     assert fake.submissions[1][6] == ""
 
 
-def test_invalid_url_records_failed_row(sheets_service: tuple[ToolService, FakeSheets]) -> None:
+def test_invalid_url_does_not_write_a_tracking_row(
+    sheets_service: tuple[ToolService, FakeSheets],
+) -> None:
     service, fake = sheets_service
     result = _submit(service, landing_page_url="notaurl")
     assert result["error"] == "validation_error"
-    assert result["status"] == "FAILED"
-    assert fake.submissions[1][2] == "FAILED"
+    assert "landing_page_url" in result["message"]
+    assert result["published"] is False
+    assert result["tracked"] is False
+    assert result["sheet_row"] is None
+    assert "status" not in result
+    assert fake.append_calls == 0
+    assert len(fake.submissions) == 1
+
+
+def test_dry_run_with_virtual_details_records_one_row(
+    sheets_service: tuple[ToolService, FakeSheets],
+) -> None:
+    service, fake = sheets_service
+    called = {"live": 0}
+
+    def _boom(*_args, **_kwargs):
+        called["live"] += 1
+        raise AssertionError("dry-run must not dispatch a live adapter")
+
+    service.sheets._dispatch_authorized_api = _boom  # type: ignore[method-assign]
+    result = _submit(
+        service,
+        location="",
+        virtual_event_details="Zoom room 12",
+        event_id="evt-virtual-1",
+    )
+    assert result["status"] == "DRY_RUN"
+    assert result["dry_run"] is True
+    assert result["published"] is False
+    assert result["sheet_row"] == 2
+    assert called["live"] == 0
+    assert fake.append_calls == 1
+    assert fake.submissions[1][2] == "DRY_RUN"
+    assert fake.submissions[1][3] == ""
     assert fake.submissions[1][6] == ""
+
+
+def test_missing_required_fields_do_not_write(
+    sheets_service: tuple[ToolService, FakeSheets],
+) -> None:
+    service, fake = sheets_service
+    result = _submit(
+        service,
+        event_name=" ",
+        event_description="",
+        landing_page_url="",
+        event_datetime="",
+        target_site="",
+        registration_url="",
+        location=None,
+        virtual_event_details=None,
+    )
+    message = result["message"]
+    assert result["error"] == "validation_error"
+    assert result["tracked"] is False
+    assert result["sheet_row"] is None
+    assert result["published"] is False
+    for field in (
+        "event_name is required",
+        "event_description is required",
+        "landing_page_url must be an http or https URL",
+        "event_datetime must be an ISO-8601 date and time",
+        "registration_url must be an http or https URL",
+        "location or virtual_event_details is required",
+        "target_site is required",
+    ):
+        assert field in message
+    assert fake.append_calls == 0
+    assert len(fake.submissions) == 1
+
+
+def test_missing_location_and_virtual_details_do_not_write(
+    sheets_service: tuple[ToolService, FakeSheets],
+) -> None:
+    service, fake = sheets_service
+    result = _submit(service, location=None, virtual_event_details="  ", event_id="evt-api-dry-run-test")
+    assert result["error"] == "validation_error"
+    assert result["message"] == "location or virtual_event_details is required"
+    assert result["event_id"] == "evt-api-dry-run-test"
+    assert result["dry_run"] is True
+    assert result["published"] is False
+    assert result["tracked"] is False
+    assert result["sheet_row"] is None
+    assert "status" not in result
+    assert fake.append_calls == 0
+    assert len(fake.submissions) == 1
+    again = _submit(service, event_id="evt-api-dry-run-test")
+    assert again["status"] == "DRY_RUN"
+    assert again["sheet_row"] == 2
+    assert fake.append_calls == 1
+    assert len(fake.submissions) == 2
+
+
+def test_invalid_datetime_does_not_write(sheets_service: tuple[ToolService, FakeSheets]) -> None:
+    service, fake = sheets_service
+    result = _submit(service, event_datetime="15/06/2027")
+    assert result["error"] == "validation_error"
+    assert "event_datetime" in result["message"]
+    assert result["tracked"] is False
+    assert result["sheet_row"] is None
+    assert fake.append_calls == 0
+
+
+def test_sheets_api_failure_is_not_a_successful_submission(
+    sheets_service: tuple[ToolService, FakeSheets],
+) -> None:
+    service, fake = sheets_service
+    fake.api_error = True
+    result = _submit(service, event_id="evt-api-down")
+    assert result["error"] == "sheets_api_error"
+    assert result.get("published") is not True
+    assert result.get("status") != "DRY_RUN"
+    assert result.get("sheet_row") is None
+    assert fake.append_calls == 1
+    assert len(fake.submissions) == 1
 
 
 def test_duplicate_submit_updates_same_row(sheets_service: tuple[ToolService, FakeSheets]) -> None:
@@ -432,7 +554,7 @@ def test_blank_optional_settings(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_http_bridge_requires_auth_and_updates(
     settings: Settings, repo, sheets_service: tuple[ToolService, FakeSheets]
 ) -> None:
-    service, _fake = sheets_service
+    service, fake = sheets_service
     settings.mcp_auth_token = "bridge-token"
     db = Database(settings.resolved_database_path)
     mcp, _ = create_server(settings, database=db)
@@ -474,6 +596,48 @@ def test_http_bridge_requires_auth_and_updates(
         body = created.json()
         assert body["status"] == "DRY_RUN"
         assert body["dry_run"] is True
+        assert body["sheet_row"] == 2
+        assert body["published"] is False
+
+        unauthenticated = client.post(
+            "/api/submissions",
+            json={
+                "event_name": "Should Not Track",
+                "event_description": "No token was sent.",
+                "landing_page_url": "https://example.com/no-auth",
+                "event_datetime": "2027-08-01T10:00:00Z",
+                "target_site": "https://10times.com",
+                "registration_url": "https://example.com/no-auth/register",
+                "location": "Hall",
+            },
+        )
+        assert unauthenticated.status_code == 401
+        assert unauthenticated.json()["error"] == "unauthorized"
+
+        invalid = client.post(
+            "/api/submissions",
+            headers={"Authorization": "Bearer bridge-token"},
+            json={
+                "event_name": "Missing Place",
+                "event_description": "No location or virtual details.",
+                "landing_page_url": "https://example.com/missing-place",
+                "event_datetime": "not-a-date",
+                "target_site": "https://10times.com",
+                "registration_url": "notaurl",
+                "event_id": "evt-invalid-http",
+            },
+        )
+        assert invalid.status_code == 400
+        invalid_body = invalid.json()
+        assert invalid_body["error"] == "validation_error"
+        assert invalid_body["tracked"] is False
+        assert invalid_body["sheet_row"] is None
+        assert "location or virtual_event_details is required" in invalid_body["message"]
+        assert "event_datetime" in invalid_body["message"]
+        assert "registration_url" in invalid_body["message"]
+        assert fake.append_calls == 1
+        assert len(fake.submissions) == 2
+        assert fake.submissions[1][2] == "DRY_RUN"
 
         bad = client.post(
             "/api/publication-updates",
