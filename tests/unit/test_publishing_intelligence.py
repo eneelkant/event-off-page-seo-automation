@@ -10,7 +10,6 @@ from event_seo_mcp.publishing.intelligence import (
     ALREADY_SUBMITTED,
     DEADLINE_PASSED,
     ELIGIBLE,
-    ELIGIBLE_WITH_RISK,
     EVENT_PAST,
     MANUAL_REVIEW_REQUIRED,
     _policy,
@@ -108,6 +107,12 @@ def test_every_registry_target_has_an_unknown_timeline(service: ToolService) -> 
         assert row["source_verification_status"] == "unverified"
         assert row["machine_verification_performed"] is False
         assert row["human_verification"] is None
+        assert row["pricing_status"] == "unknown"
+        assert row["pricing_citation_validity"] == "absent"
+        assert row["pricing_source_verification_status"] == "unverified"
+        assert row["pricing_live_verified"] is False
+        assert row["pricing_verified_at"] is None
+        assert row["free_submission_available"] is None
 
 
 def test_eventbrite_policy_uses_registry_sources_only(service: ToolService) -> None:
@@ -352,20 +357,34 @@ def test_paid_false_is_not_verified_free() -> None:
 
 def test_verified_free_and_paid_citations_are_classified() -> None:
     free = _policy(_platform(research={"pricing": FREE_EVIDENCE}))
-    assert free["free_submission_available"] is True
-    assert free["pricing_status"] == "verified_free"
+    assert free["free_submission_available"] is None
+    assert free["paid_options_available"] is None
+    assert free["pricing_status"] == "claimed_free"
+    assert free["claimed_free_submission"] is True
+    assert free["claimed_free_conditions"] == FREE_EVIDENCE["free_conditions"]
+    assert free["free_listing_conditions"] is None
     assert free["pricing_evidence_url"] == FREE_EVIDENCE["official_source_url"]
-    assert free["pricing_verified_at"] == "2026-10-29"
-    assert free["free_listing_conditions"] == FREE_EVIDENCE["free_conditions"]
-    assert free["pricing_reason"] == FREE_EVIDENCE["reason"]
+    assert free["pricing_verified_at"] is None
+    assert free["pricing_citation_recorded_at"] == "2026-10-29"
+    assert free["pricing_citation_validity"] == "complete"
+    assert free["pricing_source_verification_status"] == "unverified"
     assert free["pricing_live_verified"] is False
+    assert free["pricing_confidence"] == "unverified_citation"
+    assert "not authenticated" in free["pricing_reason"]
+    assert FREE_EVIDENCE["reason"] in free["pricing_reason"]
 
     paid = _policy(_platform(paid_submission_possible=True, research={"pricing": PAID_EVIDENCE}))
-    assert paid["free_submission_available"] is False
-    assert paid["paid_options_available"] is True
-    assert paid["pricing_status"] == "paid_option"
+    assert paid["free_submission_available"] is None
+    assert paid["paid_options_available"] is None
+    assert paid["pricing_status"] == "claimed_paid"
+    assert paid["claimed_free_submission"] is False
+    assert paid["claimed_paid_options"] is True
     assert paid["pricing_evidence_url"] == PAID_EVIDENCE["official_source_url"]
-    assert paid["pricing_verified_at"] == "2026-10-29"
+    assert paid["pricing_verified_at"] is None
+    assert paid["pricing_citation_recorded_at"] == "2026-10-29"
+    assert paid["pricing_citation_validity"] == "complete"
+    assert paid["pricing_source_verification_status"] == "unverified"
+    assert paid["pricing_live_verified"] is False
 
 
 def test_missing_or_invalid_pricing_evidence_stays_unknown() -> None:
@@ -424,7 +443,15 @@ def test_registry_citation_is_not_called_live_research(service: ToolService, mon
     assert clocks["moderation_approval_time"] == "unknown"
     assert clocks["internal_search_visibility"] == "unknown"
     assert clocks["account_required"] == "unknown"
-    assert clocks["free_submission_available"] is True
+    assert clocks["free_submission_available"] is None
+    assert clocks["pricing_status"] == "claimed_free"
+    assert clocks["pricing_citation_validity"] == "complete"
+    assert clocks["pricing_source_verification_status"] == "unverified"
+    assert clocks["pricing_live_verified"] is False
+    assert clocks["pricing_verified_at"] is None
+    assert clocks["pricing_citation_recorded_at"] == "2026-10-29"
+    assert clocks["claimed_free_submission"] is True
+    assert clocks["free_submission_conditions"] is None
     assert "No live research" in clocks["evidence_summary"]
 
 
@@ -470,20 +497,27 @@ def test_official_windows_and_caller_timing_stay_distinct(service: ToolService) 
         documented_hours_by_platform={"eventbrite": 48},
     )
     caller_row = next(row for row in caller["decisions"] if row["target_id"] == "eventbrite")
-    assert caller_row["eligibility_status"] == ELIGIBLE_WITH_RISK
+    assert caller_row["eligibility_status"] == MANUAL_REVIEW_REQUIRED
     assert caller_row["timing_source"] == "caller_supplied"
     assert caller_row["timing_kind"] == "caller_supplied"
     assert caller_row["source_verification_status"] == "unverified"
     assert caller_row["machine_verification_performed"] is False
+    assert caller_row["pricing_status"] == "claimed_free"
+    assert caller_row["pricing_source_verification_status"] == "unverified"
+    assert caller_row["free_submission_available"] is None
     assert "not an official guarantee" in caller_row["eligibility_reason"]
+    assert "not trusted" in caller_row["eligibility_reason"]
+    assert "eventbrite" not in caller["recommended_submission_order"]
 
     heuristic = _engine(service).analyze_deadlines(**base, conservative_fallback_hours=72)
     heuristic_row = next(row for row in heuristic["decisions"] if row["target_id"] == "eventbrite")
     assert heuristic_row["timing_source"] == "heuristic"
     assert heuristic_row["timing_kind"] == "heuristic"
-    assert heuristic_row["eligibility_status"] == ELIGIBLE_WITH_RISK
+    assert heuristic_row["eligibility_status"] == MANUAL_REVIEW_REQUIRED
     assert heuristic_row["source_verification_status"] == "unverified"
+    assert heuristic_row["pricing_status"] == "claimed_free"
     assert heuristic_row["machine_verification_performed"] is False
+    assert "eventbrite" not in heuristic["recommended_submission_order"]
 
 
 @pytest.mark.parametrize(
@@ -510,6 +544,34 @@ def test_official_windows_and_caller_timing_stay_distinct(service: ToolService) 
             "official_source_url",
         ),
         ({"pricing_evidence_by_platform": "free"}, "pricing_evidence_by_platform"),
+        (
+            {"pricing_evidence_by_platform": {"eventbrite": {**FREE_EVIDENCE, "pricing_live_verified": True}}},
+            "pricing_live_verified",
+        ),
+        (
+            {
+                "pricing_evidence_by_platform": {
+                    "eventbrite": {**FREE_EVIDENCE, "pricing_source_verification_status": "human_verified"}
+                }
+            },
+            "pricing_source_verification_status",
+        ),
+        (
+            {"pricing_evidence_by_platform": {"eventbrite": {**FREE_EVIDENCE, "pricing_verified": True}}},
+            "pricing_verified",
+        ),
+        (
+            {"pricing_evidence_by_platform": {"eventbrite": {**FREE_EVIDENCE, "human_verified": True}}},
+            "human_verified",
+        ),
+        (
+            {"pricing_evidence_by_platform": {"eventbrite": {**FREE_EVIDENCE, "machine_verified": True}}},
+            "machine_verified",
+        ),
+        (
+            {"pricing_evidence_by_platform": {"eventbrite": {**FREE_EVIDENCE, "verified": True}}},
+            "verified",
+        ),
         (
             {
                 "documented_hours_by_platform": {"eventbrite": 48},
@@ -613,7 +675,10 @@ def test_deadline_uses_timezone_buffer_and_past_events(service: ToolService) -> 
     row = next(item for item in zoned["decisions"] if item["target_id"] == "eventbrite")
     assert zoned["event_start"] == "2027-07-15T13:00:00+00:00"
     assert row["latest_safe_submission_datetime"] == "2027-07-12T13:00:00+00:00"
-    assert row["eligibility_status"] == ELIGIBLE_WITH_RISK
+    assert row["eligibility_status"] == MANUAL_REVIEW_REQUIRED
+    assert row["pricing_status"] == "claimed_free"
+    assert row["free_submission_available"] is None
+    assert "eventbrite" not in zoned["recommended_submission_order"]
 
     tight_buffer = engine.analyze_deadlines(
         event_name="Buffer Summit",
@@ -686,10 +751,18 @@ def test_paid_citation_is_excluded_from_the_default_plan(service: ToolService) -
         pricing_evidence_by_platform={"eventbrite": PAID_EVIDENCE},
     )
     row = next(item for item in plan["decisions"] if item["target_id"] == "eventbrite")
-    assert row["eligibility_status"] == "NOT_FREE"
-    assert row["pricing_status"] == "paid_option"
-    assert row["free_submission_available"] is False
+    assert row["eligibility_status"] == MANUAL_REVIEW_REQUIRED
+    assert row["eligibility_status"] != "NOT_FREE"
+    assert row["pricing_status"] == "claimed_paid"
+    assert row["claimed_paid_options"] is True
+    assert row["claimed_free_submission"] is False
+    assert row["free_submission_available"] is None
+    assert row["paid_options_available"] is None
+    assert row["pricing_source_verification_status"] == "unverified"
+    assert row["pricing_live_verified"] is False
     assert "eventbrite" not in plan["recommended_submission_order"]
+    assert "eventbrite" not in plan["eligible"]
+    assert "eventbrite" not in plan["eligible_with_risk"]
 
 
 def test_analysis_recommendation_and_preview_agree(service: ToolService) -> None:
@@ -726,8 +799,20 @@ def test_analysis_recommendation_and_preview_agree(service: ToolService) -> None
         assert by_recommend[target_id]["timing_source"] == by_analysis[target_id]["timing_source"]
         assert by_recommend[target_id]["source_verification_status"] == by_analysis[target_id]["source_verification_status"]
         assert by_recommend[target_id]["citation_validity"] == by_analysis[target_id]["citation_validity"]
+        assert by_recommend[target_id]["pricing_status"] == by_analysis[target_id]["pricing_status"]
+        assert by_recommend[target_id]["pricing_citation_validity"] == by_analysis[target_id]["pricing_citation_validity"]
+        assert (
+            by_recommend[target_id]["pricing_source_verification_status"]
+            == by_analysis[target_id]["pricing_source_verification_status"]
+            == by_preview[target_id]["pricing_source_verification_status"]
+        )
+        assert by_recommend[target_id]["pricing_live_verified"] is False
+        assert by_preview[target_id]["pricing_live_verified"] is False
         assert by_preview[target_id]["machine_verification_performed"] is False
     assert by_analysis["eventbrite"]["eligibility_status"] == MANUAL_REVIEW_REQUIRED
+    assert by_analysis["eventbrite"]["pricing_status"] == "claimed_free"
+    assert by_analysis["eventbrite"]["pricing_citation_validity"] == "complete"
+    assert by_analysis["eventbrite"]["free_submission_available"] is None
     assert by_analysis["eventbrite"]["source_verification_status"] == "unverified"
     assert by_analysis["10times"]["eligibility_status"] == MANUAL_REVIEW_REQUIRED
     assert "eventbrite" not in analysis["recommended_submission_order"]
@@ -997,6 +1082,11 @@ def test_stored_human_verification_is_reported_without_a_fetch(
     assert clocks["human_verification"] is None
     assert clocks["untrusted_verification_supplied"] is True
     assert "not authentication" in clocks["verification_warning"]
+    assert clocks["free_submission_available"] is None
+    assert clocks["pricing_status"] == "claimed_free"
+    assert clocks["pricing_source_verification_status"] == "unverified"
+    assert clocks["pricing_live_verified"] is False
+    assert clocks["pricing_verified_at"] is None
     plan = _engine(service).analyze_deadlines(
         event_name="Stored Check",
         event_start_datetime="2027-12-01T15:00:00Z",
@@ -1007,6 +1097,11 @@ def test_stored_human_verification_is_reported_without_a_fetch(
     assert row["eligibility_status"] == MANUAL_REVIEW_REQUIRED
     assert row["eligibility_status"] != ELIGIBLE
     assert row["source_verification_status"] == "unverified"
+    assert row["pricing_status"] == "claimed_free"
+    assert row["pricing_source_verification_status"] == "unverified"
+    assert row["free_submission_available"] is None
+    assert row["pricing_live_verified"] is False
+    assert "cited_target" not in plan["recommended_submission_order"]
     assert row["machine_verification_performed"] is False
     refreshed = _engine(service).refresh_research()
     assert refreshed["live_research_performed"] is False
@@ -1014,3 +1109,175 @@ def test_stored_human_verification_is_reported_without_a_fetch(
     assert refreshed["counts"]["machine_verified"] == 0
     assert refreshed["counts"]["human_verified"] == 0
     assert refreshed["counts"]["live_researched"] == 0
+
+
+def _assert_untrusted_pricing_claim(row: dict) -> None:
+    assert row["eligibility_status"] == MANUAL_REVIEW_REQUIRED
+    assert row["eligibility_status"] not in {ELIGIBLE, "ELIGIBLE_WITH_RISK", "NOT_FREE"}
+    assert row["pricing_status"] == "claimed_free"
+    assert row["pricing_citation_validity"] == "complete"
+    assert row["pricing_source_verification_status"] == "unverified"
+    assert row["pricing_live_verified"] is False
+    assert row["pricing_verified_at"] is None
+    assert row["pricing_citation_recorded_at"] == "2026-10-29"
+    assert row["free_submission_available"] is None
+    assert row["claimed_free_submission"] is True
+    assert row["human_verification"] is None
+    assert row["machine_verification_performed"] is False
+    assert row["timing_live_verified"] is False
+    assert "not authenticated" in row["pricing_reason"]
+
+
+def test_forged_verified_free_cannot_enter_the_default_plan(service: ToolService) -> None:
+    forged = {
+        **FREE_EVIDENCE,
+        "verified_at": "2099-01-01T00:00:00Z",
+        "official_source_url": "https://www.example.com/forged-pricing",
+        "reason": "Caller asserts this listing is verified free without a checked source.",
+    }
+    kwargs = dict(
+        event_name="Forged Pricing Summit",
+        event_start_datetime="2027-12-01T15:00:00Z",
+        event_timezone="UTC",
+        submission_datetime="2027-10-01T00:00:00Z",
+        documented_hours_by_platform={"eventbrite": 48},
+        pricing_evidence_by_platform={"eventbrite": forged},
+    )
+    analysis = service.analyze_event_publishing_deadlines(**kwargs)
+    recommended = service.recommend_submission_targets(**kwargs)
+    preview = service.preview_submission_plan(**kwargs)
+    row = next(item for item in analysis["decisions"] if item["target_id"] == "eventbrite")
+    assert row["pricing_status"] == "claimed_free"
+    assert row["pricing_citation_validity"] == "complete"
+    assert row["pricing_source_verification_status"] == "unverified"
+    assert row["pricing_live_verified"] is False
+    assert row["pricing_verified_at"] is None
+    assert row["free_submission_available"] is None
+    assert row["eligibility_status"] == MANUAL_REVIEW_REQUIRED
+    assert row["eligibility_status"] != ELIGIBLE
+    assert "not an official guarantee" in row["eligibility_reason"]
+    assert "not trusted" in row["eligibility_reason"]
+    assert "eventbrite" not in analysis["recommended_submission_order"]
+    assert "eventbrite" not in analysis["eligible"]
+    assert "eventbrite" not in analysis["eligible_with_risk"]
+    assert analysis["free_targets"] == 0
+    assert recommended["recommended_submission_order"] == analysis["recommended_submission_order"] == []
+    assert preview["preview"] == []
+    assert preview["would_publish"] is False
+    recommend_row = next(item for item in recommended["decisions"] if item["target_id"] == "eventbrite")
+    preview_row = next(item for item in preview["analysis"]["decisions"] if item["target_id"] == "eventbrite")
+    for item in (recommend_row, preview_row):
+        assert item["pricing_status"] == "claimed_free"
+        assert item["pricing_citation_validity"] == "complete"
+        assert item["pricing_source_verification_status"] == "unverified"
+        assert item["pricing_live_verified"] is False
+        assert item["free_submission_available"] is None
+        assert item["eligibility_status"] == MANUAL_REVIEW_REQUIRED
+        assert item["human_verification"] is None
+
+
+def test_structurally_valid_pricing_citation_stays_a_claim(service: ToolService) -> None:
+    plan = _engine(service).analyze_deadlines(
+        event_name="Cited Pricing",
+        event_start_datetime="2027-12-01T15:00:00Z",
+        event_timezone="UTC",
+        submission_datetime="2027-10-01T00:00:00Z",
+        conservative_fallback_hours=72,
+        pricing_evidence_by_platform={"eventbrite": FREE_EVIDENCE},
+    )
+    row = next(item for item in plan["decisions"] if item["target_id"] == "eventbrite")
+    _assert_untrusted_pricing_claim(row)
+    assert row["pricing_evidence_url"] == FREE_EVIDENCE["official_source_url"]
+    assert "eventbrite" not in plan["recommended_submission_order"]
+    assert plan["free_targets"] == 0
+
+
+def test_conflicting_pricing_claims_stay_unknown() -> None:
+    free_and_not_free = _policy(
+        _platform(
+            research={
+                "pricing": {
+                    **FREE_EVIDENCE,
+                    "free_submission_available": False,
+                }
+            }
+        )
+    )
+    assert free_and_not_free["pricing_status"] == "unknown"
+    assert free_and_not_free["pricing_citation_validity"] == "invalid"
+    assert free_and_not_free["free_submission_available"] is None
+    assert free_and_not_free["claimed_free_submission"] is None
+    assert "contradicts" in free_and_not_free["pricing_reason"]
+
+    paid_and_not_paid = _policy(
+        _platform(
+            research={
+                "pricing": {
+                    **PAID_EVIDENCE,
+                    "paid_options_available": False,
+                }
+            }
+        )
+    )
+    assert paid_and_not_paid["pricing_status"] == "unknown"
+    assert paid_and_not_paid["pricing_citation_validity"] == "invalid"
+    assert paid_and_not_paid["claimed_paid_options"] is None
+    assert "contradicts" in paid_and_not_paid["pricing_reason"]
+
+    not_free_claim = _policy(
+        _platform(
+            research={
+                "pricing": {
+                    "free_submission_available": False,
+                    "paid_options_available": False,
+                    "official_source_url": "https://www.example.com/official-pricing",
+                    "verified_at": "2026-10-29",
+                    "reason": "The pricing page says neither a free nor a paid listing is offered.",
+                }
+            }
+        )
+    )
+    assert not_free_claim["pricing_status"] == "claimed_not_free"
+    assert not_free_claim["free_submission_available"] is None
+    assert not_free_claim["claimed_free_submission"] is False
+    assert not_free_claim["pricing_source_verification_status"] == "unverified"
+    assert not_free_claim["pricing_verified_at"] is None
+
+
+def test_registry_pricing_flag_does_not_verify_free() -> None:
+    flagged = {**FREE_EVIDENCE, "pricing_live_verified": True, "pricing_verified": True}
+    row = _policy(_platform(research={"pricing": flagged}))
+    assert row["pricing_status"] == "unknown"
+    assert row["pricing_citation_validity"] == "invalid"
+    assert row["pricing_source_verification_status"] == "unverified"
+    assert row["pricing_live_verified"] is False
+    assert row["free_submission_available"] is None
+    assert row["claimed_free_submission"] is None
+    assert "pricing_live_verified" in row["pricing_reason"]
+    assert "not accepted" in row["pricing_reason"]
+
+
+def test_claimed_not_free_is_not_treated_as_proven_not_free(service: ToolService) -> None:
+    plan = _engine(service).analyze_deadlines(
+        event_name="Claimed Paid",
+        event_start_datetime="2027-12-01T15:00:00Z",
+        event_timezone="UTC",
+        submission_datetime="2027-10-01T00:00:00Z",
+        documented_hours_by_platform={"eventbrite": 24},
+        pricing_evidence_by_platform={
+            "eventbrite": {
+                "free_submission_available": False,
+                "official_source_url": "https://www.example.com/official-pricing",
+                "verified_at": "2026-10-29T08:00:00Z",
+                "reason": "The pricing page describes a paid listing and does not offer a free one.",
+            }
+        },
+    )
+    row = next(item for item in plan["decisions"] if item["target_id"] == "eventbrite")
+    assert row["pricing_status"] == "claimed_not_free"
+    assert row["free_submission_available"] is None
+    assert row["eligibility_status"] == MANUAL_REVIEW_REQUIRED
+    assert row["eligibility_status"] != "NOT_FREE"
+    assert row["pricing_live_verified"] is False
+    assert "eventbrite" not in plan["recommended_submission_order"]
+    assert plan["paid_or_not_free"] == []

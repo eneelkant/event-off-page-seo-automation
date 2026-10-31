@@ -3,9 +3,10 @@
 This module reads config/platforms.json. It does not fetch official websites,
 does not invent publication times, and does not connect to an seo-agent API.
 A complete citation is not source verification. A verifier name, timestamp,
-and claim are not authentication. No trusted verification workflow is
-configured, so caller-supplied and registry-stored verification records stay
-unverified. Machine verification is not implemented.
+and claim are not authentication. A pricing classification such as
+verified_free is a claim, not proof that submission is free. No trusted
+verification workflow is configured, so caller-supplied and registry-stored
+verification records stay unverified. Machine verification is not implemented.
 """
 
 from __future__ import annotations
@@ -67,6 +68,11 @@ _VERIFICATION_FLAG_KEYS = (
     "machine_verification_performed",
     "timing_live_verified",
     "verified",
+)
+_PRICING_FLAG_KEYS = _VERIFICATION_FLAG_KEYS + (
+    "pricing_source_verification_status",
+    "pricing_live_verified",
+    "pricing_verified",
 )
 
 _SUBMITTED_STATES = {
@@ -163,9 +169,17 @@ class PublishingIntelligence:
             "free_submission_available": target["free_submission_available"],
             "free_submission_conditions": target["free_listing_conditions"],
             "paid_options_available": target["paid_options_available"],
+            "pricing_status": target["pricing_status"],
             "pricing_reason": target["pricing_reason"],
             "pricing_evidence_url": target["pricing_evidence_url"],
             "pricing_verified_at": target["pricing_verified_at"],
+            "pricing_citation_recorded_at": target.get("pricing_citation_recorded_at"),
+            "pricing_citation_validity": target.get("pricing_citation_validity") or "absent",
+            "pricing_source_verification_status": target.get("pricing_source_verification_status") or UNVERIFIED,
+            "pricing_live_verified": False,
+            "claimed_free_submission": target.get("claimed_free_submission"),
+            "claimed_paid_options": target.get("claimed_paid_options"),
+            "claimed_free_conditions": target.get("claimed_free_conditions"),
             "account_required": "unknown",
             "email_verification_required": "unknown",
             "organization_verification_required": "unknown",
@@ -625,8 +639,8 @@ class PublishingIntelligence:
         if policy["free_submission_available"] is False and not allow_paid:
             return _decision_row(
                 policy, NOT_FREE,
-                "A pricing citation says free submission is unavailable, and paid options are disabled for this plan. "
-                "That citation was not machine-checked.",
+                "Trusted pricing records free submission as unavailable, and paid options are disabled for this plan. "
+                "A URL, date, reason, or classification does not create that record.",
                 start, planned, None, None, "unknown", "unknown",
             )
         if virtual_event is True and policy["supports_virtual_events"] is False:
@@ -737,8 +751,9 @@ class PublishingIntelligence:
             else:
                 status = MANUAL_REVIEW_REQUIRED
                 reason = (
-                    "A publication window was calculated, but free submission is not verified "
-                    "by an official source. Unknown or unverified pricing is excluded from the default plan. "
+                    reason
+                    + " Free submission is not trusted. A pricing citation is not authentication, "
+                    "so unknown or unverified pricing is excluded from the default plan. "
                     + str(policy.get("pricing_reason") or "")
                 ).strip()
         return _decision_row(
@@ -781,10 +796,17 @@ def _decision_row(
         "eligibility_status": status,
         "eligibility_reason": reason,
         "free_submission_available": policy["free_submission_available"],
+        "paid_options_available": policy.get("paid_options_available"),
         "pricing_status": policy.get("pricing_status"),
         "pricing_reason": policy.get("pricing_reason"),
         "pricing_evidence_url": policy.get("pricing_evidence_url"),
         "pricing_verified_at": policy.get("pricing_verified_at"),
+        "pricing_citation_recorded_at": policy.get("pricing_citation_recorded_at"),
+        "pricing_citation_validity": policy.get("pricing_citation_validity") or "absent",
+        "pricing_source_verification_status": policy.get("pricing_source_verification_status") or UNVERIFIED,
+        "pricing_live_verified": False,
+        "claimed_free_submission": policy.get("claimed_free_submission"),
+        "claimed_paid_options": policy.get("claimed_paid_options"),
         "publication_time_confidence": confidence,
         "timing_source": timing_source,
         "timing_kind": timing_kind,
@@ -859,8 +881,14 @@ def _policy(platform: PlatformRecord) -> dict[str, Any]:
         "pricing_reason": pricing["pricing_reason"],
         "pricing_evidence_url": pricing["pricing_evidence_url"],
         "pricing_verified_at": pricing["pricing_verified_at"],
+        "pricing_citation_recorded_at": pricing.get("pricing_citation_recorded_at"),
         "pricing_confidence": pricing["pricing_confidence"],
+        "pricing_citation_validity": pricing.get("pricing_citation_validity") or "absent",
+        "pricing_source_verification_status": pricing.get("pricing_source_verification_status") or UNVERIFIED,
         "pricing_live_verified": False,
+        "claimed_free_submission": pricing.get("claimed_free_submission"),
+        "claimed_paid_options": pricing.get("claimed_paid_options"),
+        "claimed_free_conditions": pricing.get("claimed_free_conditions"),
         "registry_paid_submission_possible": paid,
         "account_required": "unknown",
         "email_verification_required": "unknown",
@@ -925,9 +953,13 @@ def _pricing_from_evidence(packet: Any, registry_paid: bool | None) -> dict[str,
         "pricing_verified_at": None,
         "free_listing_conditions": None,
         "pricing_confidence": "none",
+        "pricing_citation_recorded_at": None,
         "pricing_citation_validity": "absent",
         "pricing_source_verification_status": UNVERIFIED,
         "pricing_live_verified": False,
+        "claimed_free_submission": None,
+        "claimed_paid_options": None,
+        "claimed_free_conditions": None,
         "registry_paid_submission_possible": registry_paid,
     }
     if packet is None:
@@ -945,24 +977,33 @@ def _pricing_from_evidence(packet: Any, registry_paid: bool | None) -> dict[str,
     if classification == "paid_option" and paid is None:
         paid = True
     if free is True:
-        status = "verified_free"
+        status = "claimed_free"
     elif paid is True:
-        status = "paid_option"
+        status = "claimed_paid"
     elif free is False:
-        status = "verified_not_free"
+        status = "claimed_not_free"
     else:
         status = "unknown"
-    verified_at = _parse_evidence_date(packet.get("verified_at"))
+    recorded_at = _parse_evidence_date(packet.get("verified_at"))
     return {
-        "free_submission_available": free,
-        "paid_options_available": paid,
+        # Trusted availability stays unknown. A complete citation is only a claim.
+        "free_submission_available": None,
+        "paid_options_available": None,
         "pricing_status": status,
-        "pricing_reason": str(packet.get("reason")).strip(),
+        "pricing_reason": (
+            str(packet.get("reason")).strip()
+            + " This citation was not authenticated. A URL, date, reason, or classification "
+            "does not verify pricing."
+        ),
         "pricing_evidence_url": _http_url(packet.get("official_source_url")),
-        "pricing_verified_at": verified_at,
-        "free_listing_conditions": (
+        "pricing_verified_at": None,
+        "pricing_citation_recorded_at": recorded_at,
+        "free_listing_conditions": None,
+        "claimed_free_conditions": (
             str(packet.get("free_conditions")).strip() if free is True and packet.get("free_conditions") else None
         ),
+        "claimed_free_submission": free,
+        "claimed_paid_options": paid,
         "pricing_confidence": "unverified_citation",
         "pricing_citation_validity": "complete",
         "pricing_source_verification_status": UNVERIFIED,
@@ -974,6 +1015,9 @@ def _pricing_from_evidence(packet: Any, registry_paid: bool | None) -> dict[str,
 def _pricing_problem(packet: Any) -> str | None:
     if not isinstance(packet, dict):
         return "pricing evidence must be an object with an official source URL, verification date, and reason"
+    for key in _PRICING_FLAG_KEYS:
+        if key in packet:
+            return f"{key} cannot be supplied as proof that pricing was verified"
     classification = packet.get("classification")
     if classification not in {None, "verified_free", "paid_option"}:
         return "classification must be verified_free or paid_option"
@@ -1195,6 +1239,14 @@ def _validate_timing_inputs(
                 return f"{key}: {problem}"
     if pricing_evidence_by_platform is not None and not isinstance(pricing_evidence_by_platform, dict):
         return "pricing_evidence_by_platform must be an object"
+    if isinstance(pricing_evidence_by_platform, dict):
+        for key, item in pricing_evidence_by_platform.items():
+            if not isinstance(key, str) or not key.strip():
+                return "pricing evidence keys must be platform ids"
+            if isinstance(item, dict):
+                for flag in _PRICING_FLAG_KEYS:
+                    if flag in item:
+                        return f"{key}: {flag} cannot be supplied as proof that pricing was verified"
     hours = documented_hours_by_platform or {}
     days = documented_business_days_by_platform or {}
     both = set(hours) & set(days)

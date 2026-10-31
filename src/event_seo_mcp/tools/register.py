@@ -316,8 +316,9 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
         A complete citation is not source verification. kind guarantee does not make a target ELIGIBLE.
         A human_verification name, timestamp, and claim are not authentication. No trusted verification
         workflow is configured, so those citations stay unverified and require manual review.
-        Estimates, caller-supplied windows, and heuristics stay risk-labelled. Machine verification is not performed.
-        Unknown timelines and unknown pricing stay out of the default recommendation.
+        Machine verification is not performed. Unknown timelines stay out of the default recommendation.
+        A pricing citation, including classification verified_free, is a claim. It does not set
+        free_submission_available and does not make caller-supplied or heuristic windows eligible.
         """
         return service.analyze_event_publishing_deadlines(
             event_name=event_name,
@@ -349,10 +350,10 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
         official_publication_windows_by_platform: dict[str, Any] | None = None,
         pricing_evidence_by_platform: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Return the default plan. Unknown pricing, unknown timelines, and unverified citations stay excluded.
+        """Return the default plan. Unknown and claimed pricing, unknown timelines, and unverified citations stay excluded.
 
-        Timing arguments match analyze_event_publishing_deadlines. Caller-supplied verification metadata
-        cannot make a target ELIGIBLE. Paid options stay excluded.
+        Timing arguments match analyze_event_publishing_deadlines. A verified_free classification
+        and caller-supplied verification metadata cannot make a target ELIGIBLE. Paid options stay excluded.
         """
         return service.recommend_submission_targets(
             event_name=event_name,

@@ -447,6 +447,9 @@ class ToolService:
                     "machine_verification_performed": False,
                     "latest_safe_submission_datetime": row["latest_safe_submission_datetime"],
                     "pricing_status": row["pricing_status"],
+                    "pricing_citation_validity": row["pricing_citation_validity"],
+                    "pricing_source_verification_status": row["pricing_source_verification_status"],
+                    "pricing_live_verified": False,
                     "free_submission_available": row["free_submission_available"],
                 }
                 for row in analysis["decisions"]

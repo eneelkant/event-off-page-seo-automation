@@ -27,11 +27,22 @@ Automated extraction from official pages is not implemented. Guessing a number f
 
 `paid_submission_possible: false` is only a registry flag. It is not proof that a public listing is free, and it is not proof that paid options are absent. `paid_submission_possible: true` does not by itself verify a paid product.
 
-`free_submission_available` is true only when a complete official citation says a free submission exists. `paid_options_available` is true only when a complete citation says a paid option exists. Otherwise both stay null and `pricing_status` is `unknown`.
+Pricing uses four separate fields:
 
-Policy results include `pricing_reason`, `pricing_evidence_url`, and `pricing_verified_at`. Invalid evidence records the rejection reason and leaves the target unknown.
+| Field | Meaning |
+| --- | --- |
+| `pricing_citation_validity` | `complete` when a citation has an `http` or `https` URL, an ISO-8601 date, a written reason, and a free or paid statement. `absent` when no citation was supplied. `invalid` when the packet could not be read. Structural completeness is not verification. |
+| `pricing_source_verification_status` | `unverified` for every citation this server can read. No trusted pricing workflow is configured. |
+| `pricing_status` | What the evidence claims: `unknown`, `claimed_free`, `claimed_paid`, or `claimed_not_free`. The input classification `verified_free` is a claim. It is never copied into this field. |
+| `pricing_live_verified` | Always false. This server does not fetch the pricing page. |
 
-Unknown pricing is excluded from the default recommended plan, even when a publication window is available. The timing result is then `MANUAL_REVIEW_REQUIRED`. A citation that says free submission is unavailable is `NOT_FREE` while paid options are disabled.
+`free_submission_available` and `paid_options_available` stay null on policy results and on deadline decisions. A citation does not set them. The claim itself is `claimed_free_submission`, `claimed_paid_options`, and `claimed_free_conditions`. `free_listing_conditions` stays null because those conditions were not authenticated.
+
+`pricing_verified_at` stays null. The date written on the citation is `pricing_citation_recorded_at`. `pricing_evidence_url` is the supplied URL, and `pricing_reason` repeats the supplied reason and states that the citation was not authenticated.
+
+A caller flag such as `pricing_live_verified`, `pricing_verified`, `pricing_source_verification_status`, `human_verified`, or `verified` is rejected as `validation_error` by analysis, recommendation, and preview. The same flag stored in the registry is not accepted, so that row stays `unknown` rather than `claimed_free`. A `verified_free` classification that also sets `free_submission_available` to false, or a `paid_option` classification that sets `paid_options_available` to false, is invalid and stays `unknown`.
+
+Unknown, claimed free, claimed paid, and claimed not-free pricing are excluded from `recommended_submission_order`. When a window would otherwise fit, the timing result is `MANUAL_REVIEW_REQUIRED` and the calculated deadline stays visible. `NOT_FREE` is reserved for a trusted record of `free_submission_available: false`. No current input creates that record, so a paid citation is not labeled `NOT_FREE`. `free_targets` counts only trusted free availability, which stays 0.
 
 ## Citation validity and source verification
 
@@ -64,16 +75,16 @@ The same arguments are accepted by:
 - `recommend_submission_targets`
 - `preview_submission_plan`
 
-| Input | Verification | Result when the deadline fits and pricing is verified free |
-| --- | --- | --- |
-| Complete citation with `kind: "guarantee"` | `unverified` | `MANUAL_REVIEW_REQUIRED`. The calculated window stays visible, with a warning. It is not `ELIGIBLE`. |
-| Complete citation with `kind: "estimate"` | `unverified` | `MANUAL_REVIEW_REQUIRED`. |
-| Same citation plus a `human_verification` name, timestamp, and claim | `unverified` | `MANUAL_REVIEW_REQUIRED`. The supplied record is not authenticated. |
-| `documented_hours_by_platform` or `documented_business_days_by_platform` | not a citation | `ELIGIBLE_WITH_RISK`. |
-| `conservative_fallback_hours` | heuristic | `ELIGIBLE_WITH_RISK`. |
-| none of the above | unknown timeline | `PUBLICATION_TIME_UNKNOWN`, excluded from the default plan. |
+| Input | Publication verification | Pricing this server can produce | Result when the deadline fits |
+| --- | --- | --- | --- |
+| Complete citation with `kind: "guarantee"` | `unverified` | unknown or any claim | `MANUAL_REVIEW_REQUIRED`. The calculated window stays visible, with a warning. It is not `ELIGIBLE`. |
+| Complete citation with `kind: "estimate"` | `unverified` | unknown or any claim | `MANUAL_REVIEW_REQUIRED`. |
+| Same citation plus a `human_verification` name, timestamp, and claim | `unverified` | unknown or any claim | `MANUAL_REVIEW_REQUIRED`. The supplied record is not authenticated. |
+| `documented_hours_by_platform` or `documented_business_days_by_platform` | not a citation | unknown, `claimed_free`, `claimed_paid`, or `claimed_not_free` | `MANUAL_REVIEW_REQUIRED`. The caller window is not an official guarantee, and the pricing claim is not trusted. |
+| `conservative_fallback_hours` | heuristic | unknown or any claim | `MANUAL_REVIEW_REQUIRED` for the same pricing reason. |
+| none of the above | unknown timeline | any | `PUBLICATION_TIME_UNKNOWN`, excluded from the default plan. |
 
-Unknown pricing stays `MANUAL_REVIEW_REQUIRED` and out of `recommended_submission_order`. A supplied verification record does not change that. Negative numbers, booleans, strings, values above 366 days, conflicting windows, and invalid verification metadata are `validation_error` on all three tools. Business-day windows skip weekends. An event start that is not after the planning time is `EVENT_PAST`.
+`ELIGIBLE` and `ELIGIBLE_WITH_RISK` would require trusted free availability. No configured workflow sets `free_submission_available` to true, so those states are not produced from a pricing citation, a URL, a date, a reason, or a boolean flag. Negative numbers, booleans, strings, values above 366 days, conflicting windows, pricing verification flags, and invalid verification metadata are `validation_error` on all three tools. Business-day windows skip weekends. An event start that is not after the planning time is `EVENT_PAST`.
 
 `recommend_submission_targets` and `preview_submission_plan` use those same states. The preview sets `would_publish` to false.
 
@@ -100,7 +111,7 @@ Read-only planning:
 ## Still required before production
 
 - Live publication remains off by default. Do not send `authorize_publication: true` while testing.
-- No trusted verification workflow is configured, so no publication citation becomes `ELIGIBLE`.
+- No trusted verification workflow is configured, so no publication citation becomes `ELIGIBLE` and no pricing citation becomes trusted free.
 - Official pages are not fetched. `machine_verified` stays unused until a reviewed extractor confirms the claim and otherwise returns `unknown`.
 - A future trusted workflow has to authenticate the verifier. Storing a name in the registry or in a tool argument is not that workflow.
 - `seo-agent` is not configured.
