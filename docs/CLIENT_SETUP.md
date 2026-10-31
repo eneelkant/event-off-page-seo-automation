@@ -73,7 +73,7 @@ MCP_TRANSPORT=stdio python -m event_seo_mcp.server
 
 ## Planning tools
 
-`analyze_event_publishing_deadlines`, `recommend_submission_targets`, and `preview_submission_plan` share the same timing arguments. Caller-supplied hours are not official guarantees. A cited official window needs a source URL, verification date, summary, and `kind` of `guarantee` or `estimate`. `research_target_publication_time` reads the local registry and reports `live_research_performed: false`. `generate_seo_event_content` accepts only `content_source=template`. These tools do not publish. See `docs/PUBLISHING_ENGINE.md`.
+`analyze_event_publishing_deadlines`, `recommend_submission_targets`, and `preview_submission_plan` share the same timing arguments and the same verification state. A citation with a URL, date, summary, and `kind: "guarantee"` is only structurally complete. It stays `unverified` and is not `ELIGIBLE` until a `human_verification` record names the verifier, the claim checked, the timestamp, and the same window. Estimates, caller-supplied hours, and heuristics stay risk-labelled. The server does not fetch pages and does not report machine verification. `generate_seo_event_content` accepts only `content_source=template`. These tools do not publish. See `docs/PUBLISHING_ENGINE.md`.
 
 ## Auth reminder
 

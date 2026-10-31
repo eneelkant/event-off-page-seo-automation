@@ -240,16 +240,16 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
 
     @mcp.tool()
     def research_target_publication_time(platform_id: str) -> dict[str, Any]:
-        """Read one target's registry citation. Does not fetch the website or invent a publication time.
+        """Read one target's stored citation. Does not fetch the website or claim machine verification.
 
-        The result says live_research_performed false. Unknown clocks stay unknown.
-        Google indexing is reported separately from publication time.
+        citation_validity and source_verification_status are separate. A complete citation stays unverified
+        until a human_verification record is stored. Google indexing is separate from publication time.
         """
         return service.research_target_publication_time(platform_id)
 
     @mcp.tool()
     def refresh_target_research() -> dict[str, Any]:
-        """Store a registry snapshot for every target. This is not live website research."""
+        """Store a registry snapshot for every target. This is not live research or machine verification."""
         return service.refresh_target_research()
 
     @mcp.tool()
@@ -313,11 +313,10 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
     ) -> dict[str, Any]:
         """Classify every non-workflow target against the timezone-aware event start.
 
-        documented_hours_by_platform and documented_business_days_by_platform are caller-supplied.
-        official_publication_windows_by_platform requires a source URL, verification date, summary,
-        kind of guarantee or estimate, and exactly one of hours or business_days.
-        Unknown timelines and unverified pricing stay out of the default recommendation.
-        Negative, malformed, or unreasonable timing values are rejected.
+        A complete citation is not source verification. kind guarantee does not make a target ELIGIBLE.
+        ELIGIBLE requires human_verification of a guarantee plus verified free pricing and a deadline that fits.
+        Estimates, caller-supplied windows, and heuristics stay risk-labelled. Machine verification is not performed.
+        Unknown timelines and unknown pricing stay out of the default recommendation.
         """
         return service.analyze_event_publishing_deadlines(
             event_name=event_name,
@@ -349,9 +348,10 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
         official_publication_windows_by_platform: dict[str, Any] | None = None,
         pricing_evidence_by_platform: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Return the default plan. Unknown pricing and unknown timelines stay excluded.
+        """Return the default plan. Unknown pricing, unknown timelines, and unverified citations stay excluded.
 
-        Timing arguments match analyze_event_publishing_deadlines. Paid options stay excluded.
+        Timing arguments match analyze_event_publishing_deadlines. A guarantee citation is ELIGIBLE only
+        after recorded human verification. Paid options stay excluded.
         """
         return service.recommend_submission_targets(
             event_name=event_name,
@@ -381,7 +381,10 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
         official_publication_windows_by_platform: dict[str, Any] | None = None,
         pricing_evidence_by_platform: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Preview the same default plan as recommend_submission_targets. The preview does not publish."""
+        """Preview the same default plan as recommend_submission_targets. The preview does not publish.
+
+        Unverified citations stay in manual review. Machine verification is not claimed.
+        """
         return service.preview_submission_plan(
             event_name=event_name,
             event_start_datetime=event_start_datetime,

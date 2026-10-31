@@ -37,7 +37,28 @@ PAID_EVIDENCE = {
 }
 
 
-def _official_window(hours: int = 48, kind: str = "guarantee", business_days: int | None = None) -> dict:
+def _human_audit(hours: int = 48, kind: str = "guarantee", business_days: int | None = None, **overrides) -> dict:
+    record = {
+        "official_source_url": "https://www.example.com/official-guidelines",
+        "verified_at": "2026-10-29T16:30:00Z",
+        "verifier": "ops-review-ref-2026-10-29",
+        "claim_checked": "The guidelines page states this publication window for new listings.",
+        "kind": kind,
+    }
+    if business_days is None:
+        record["hours"] = hours
+    else:
+        record["business_days"] = business_days
+    record.update(overrides)
+    return record
+
+
+def _official_window(
+    hours: int = 48,
+    kind: str = "guarantee",
+    business_days: int | None = None,
+    human: bool = False,
+) -> dict:
     window = {
         "kind": kind,
         "official_source_url": "https://www.example.com/official-guidelines",
@@ -48,6 +69,8 @@ def _official_window(hours: int = 48, kind: str = "guarantee", business_days: in
         window["hours"] = hours
     else:
         window["business_days"] = business_days
+    if human:
+        window["human_verification"] = _human_audit(hours=hours, kind=kind, business_days=business_days)
     return window
 
 
@@ -81,6 +104,10 @@ def test_every_registry_target_has_an_unknown_timeline(service: ToolService) -> 
         assert row["publication_time_confidence"] == "unknown"
         assert row["google_indexing_estimate"] == "unknown"
         assert row["publication_time_basis"] == "not_guaranteed"
+        assert row["citation_validity"] == "absent"
+        assert row["source_verification_status"] == "unverified"
+        assert row["machine_verification_performed"] is False
+        assert row["human_verification"] is None
 
 
 def test_eventbrite_policy_uses_registry_sources_only(service: ToolService) -> None:
@@ -273,6 +300,8 @@ def test_refresh_persists_every_target(service: ToolService) -> None:
     assert first["live_research_performed"] is False
     assert first["research_status"] == "registry_only"
     assert first["counts"]["live_researched"] == 0
+    assert first["counts"]["machine_verified"] == 0
+    assert first["machine_verification_performed"] is False
     assert first["counts"]["registry_only"] == first["count"]
     assert "researched" not in first["counts"]
     row = service.repo.db.fetchone(
@@ -386,7 +415,11 @@ def test_registry_citation_is_not_called_live_research(service: ToolService, mon
     assert clocks["research_timestamp"] is None
     assert clocks["publication_time"] == "72 hours"
     assert clocks["publication_time_kind"] == "estimate"
-    assert clocks["confidence"] == "registry_citation"
+    assert clocks["confidence"] == "unverified_citation"
+    assert clocks["citation_validity"] == "complete"
+    assert clocks["source_verification_status"] == "unverified"
+    assert clocks["human_verification"] is None
+    assert clocks["machine_verification_performed"] is False
     assert clocks["google_indexing_estimate"] == "unknown"
     assert clocks["moderation_approval_time"] == "unknown"
     assert clocks["internal_search_visibility"] == "unknown"
@@ -409,21 +442,28 @@ def test_official_windows_and_caller_timing_stay_distinct(service: ToolService) 
         official_publication_windows_by_platform={"eventbrite": _official_window(48, "guarantee")},
     )
     official_row = next(row for row in official["decisions"] if row["target_id"] == "eventbrite")
-    assert official_row["eligibility_status"] == ELIGIBLE
-    assert official_row["timing_source"] == "official_evidence"
+    assert official_row["eligibility_status"] == MANUAL_REVIEW_REQUIRED
+    assert official_row["timing_source"] == "citation"
     assert official_row["timing_kind"] == "guarantee"
-    assert official_row["publication_time_confidence"] == "cited_official_source"
+    assert official_row["citation_validity"] == "complete"
+    assert official_row["source_verification_status"] == "unverified"
+    assert official_row["publication_time_confidence"] == "unverified_citation"
+    assert official_row["machine_verification_performed"] is False
     assert official_row["timing_live_verified"] is False
-    assert "eventbrite" in official["recommended_submission_order"]
+    assert official_row["verification_warning"]
+    assert official_row["latest_safe_submission_datetime"]
+    assert "not checked" in official_row["eligibility_reason"]
+    assert "eventbrite" not in official["recommended_submission_order"]
 
     estimate = _engine(service).analyze_deadlines(
         **base,
         official_publication_windows_by_platform={"eventbrite": _official_window(48, "estimate")},
     )
     estimate_row = next(row for row in estimate["decisions"] if row["target_id"] == "eventbrite")
-    assert estimate_row["eligibility_status"] == ELIGIBLE_WITH_RISK
+    assert estimate_row["eligibility_status"] == MANUAL_REVIEW_REQUIRED
     assert estimate_row["timing_kind"] == "estimate"
-    assert "not a guarantee" in estimate_row["eligibility_reason"]
+    assert estimate_row["source_verification_status"] == "unverified"
+    assert "eventbrite" not in estimate["recommended_submission_order"]
 
     caller = _engine(service).analyze_deadlines(
         **base,
@@ -433,12 +473,17 @@ def test_official_windows_and_caller_timing_stay_distinct(service: ToolService) 
     assert caller_row["eligibility_status"] == ELIGIBLE_WITH_RISK
     assert caller_row["timing_source"] == "caller_supplied"
     assert caller_row["timing_kind"] == "caller_supplied"
+    assert caller_row["source_verification_status"] == "unverified"
+    assert caller_row["machine_verification_performed"] is False
     assert "not an official guarantee" in caller_row["eligibility_reason"]
 
     heuristic = _engine(service).analyze_deadlines(**base, conservative_fallback_hours=72)
     heuristic_row = next(row for row in heuristic["decisions"] if row["target_id"] == "eventbrite")
     assert heuristic_row["timing_source"] == "heuristic"
+    assert heuristic_row["timing_kind"] == "heuristic"
     assert heuristic_row["eligibility_status"] == ELIGIBLE_WITH_RISK
+    assert heuristic_row["source_verification_status"] == "unverified"
+    assert heuristic_row["machine_verification_performed"] is False
 
 
 @pytest.mark.parametrize(
@@ -473,6 +518,65 @@ def test_official_windows_and_caller_timing_stay_distinct(service: ToolService) 
             "only one source",
         ),
         ({"event_start_datetime": "2027-12-01"}, "event_start_datetime"),
+        (
+            {
+                "official_publication_windows_by_platform": {
+                    "eventbrite": {**_official_window(), "human_verified": True}
+                }
+            },
+            "human_verified",
+        ),
+        (
+            {
+                "official_publication_windows_by_platform": {
+                    "eventbrite": {**_official_window(), "source_verification_status": "machine_verified"}
+                }
+            },
+            "source_verification_status",
+        ),
+        (
+            {
+                "official_publication_windows_by_platform": {
+                    "eventbrite": {**_official_window(), "machine_verified": True}
+                }
+            },
+            "machine_verified",
+        ),
+        (
+            {
+                "official_publication_windows_by_platform": {
+                    "eventbrite": {**_official_window(), "human_verification": _human_audit(verified_at="2026-10-29")}
+                }
+            },
+            "time component",
+        ),
+        (
+            {
+                "official_publication_windows_by_platform": {
+                    "eventbrite": {**_official_window(), "human_verification": _human_audit(verifier=True)}
+                }
+            },
+            "verifier",
+        ),
+        (
+            {
+                "official_publication_windows_by_platform": {
+                    "eventbrite": {**_official_window(), "human_verification": _human_audit(hours=12)}
+                }
+            },
+            "must match",
+        ),
+        (
+            {
+                "official_publication_windows_by_platform": {
+                    "eventbrite": {
+                        **_official_window(),
+                        "human_verification": _human_audit(official_source_url="https://www.example.com/other-page"),
+                    }
+                }
+            },
+            "must match the citation URL",
+        ),
     ],
 )
 @pytest.mark.parametrize("entry", ["analyze", "recommend", "preview"])
@@ -523,6 +627,8 @@ def test_deadline_uses_timezone_buffer_and_past_events(service: ToolService) -> 
     buffered = next(item for item in tight_buffer["decisions"] if item["target_id"] == "eventbrite")
     assert buffered["latest_safe_submission_datetime"] == "2027-11-28T15:00:00+00:00"
     assert buffered["eligibility_status"] == DEADLINE_PASSED
+    assert buffered["source_verification_status"] == "unverified"
+    assert "not a verified guarantee" in buffered["eligibility_reason"]
 
     open_buffer = engine.analyze_deadlines(
         event_name="Buffer Summit",
@@ -535,7 +641,9 @@ def test_deadline_uses_timezone_buffer_and_past_events(service: ToolService) -> 
     )
     unbuffered = next(item for item in open_buffer["decisions"] if item["target_id"] == "eventbrite")
     assert unbuffered["latest_safe_submission_datetime"] == "2027-11-29T15:00:00+00:00"
-    assert unbuffered["eligibility_status"] == ELIGIBLE
+    assert unbuffered["eligibility_status"] == MANUAL_REVIEW_REQUIRED
+    assert unbuffered["source_verification_status"] == "unverified"
+    assert unbuffered["citation_validity"] == "complete"
 
     started = engine.analyze_deadlines(
         event_name="Started",
@@ -562,8 +670,10 @@ def test_official_business_day_window_matches_weekday_math(service: ToolService)
     row = next(item for item in plan["decisions"] if item["target_id"] == "eventbrite")
     start = datetime(2027, 12, 10, 15, 0, tzinfo=timezone.utc)
     assert row["latest_safe_submission_datetime"] == subtract_business_days(start, 2).isoformat()
-    assert row["eligibility_status"] == ELIGIBLE
-    assert row["timing_source"] == "official_evidence"
+    assert row["eligibility_status"] == MANUAL_REVIEW_REQUIRED
+    assert row["timing_source"] == "citation"
+    assert row["timing_kind"] == "guarantee"
+    assert row["source_verification_status"] == "unverified"
 
 
 def test_paid_citation_is_excluded_from_the_default_plan(service: ToolService) -> None:
@@ -614,10 +724,16 @@ def test_analysis_recommendation_and_preview_agree(service: ToolService) -> None
             == by_preview[target_id]["latest_safe_submission_datetime"]
         )
         assert by_recommend[target_id]["timing_source"] == by_analysis[target_id]["timing_source"]
-    assert by_analysis["eventbrite"]["eligibility_status"] == ELIGIBLE
+        assert by_recommend[target_id]["source_verification_status"] == by_analysis[target_id]["source_verification_status"]
+        assert by_recommend[target_id]["citation_validity"] == by_analysis[target_id]["citation_validity"]
+        assert by_preview[target_id]["machine_verification_performed"] is False
+    assert by_analysis["eventbrite"]["eligibility_status"] == MANUAL_REVIEW_REQUIRED
+    assert by_analysis["eventbrite"]["source_verification_status"] == "unverified"
     assert by_analysis["10times"]["eligibility_status"] == MANUAL_REVIEW_REQUIRED
+    assert "eventbrite" not in analysis["recommended_submission_order"]
     assert "10times" not in analysis["recommended_submission_order"]
     assert analysis["publication_guaranteed"] is False
+    assert analysis["machine_verification_performed"] is False
 
 
 @pytest.mark.parametrize("content_source", ["openai", "", "seo_agent", "Template", "template-plus"])
@@ -737,3 +853,152 @@ def test_planning_does_not_publish_or_record_a_live_submission(service: ToolServ
     assert dry["job"]["dry_run"] is True
     assert dry["job"]["state"] != "PUBLISHED"
     assert service.repo.db.fetchone("SELECT COUNT(*) AS n FROM published_listings")["n"] == listings_before
+    assert plan["machine_verification_performed"] is False
+    assert preview["machine_verification_performed"] is False
+
+
+def test_complete_guarantee_citation_is_not_source_verification(service: ToolService) -> None:
+    plan = _engine(service).analyze_deadlines(
+        event_name="Cited Summit",
+        event_start_datetime="2027-12-01T15:00:00Z",
+        event_timezone="UTC",
+        submission_datetime="2027-10-01T00:00:00Z",
+        official_publication_windows_by_platform={"eventbrite": _official_window(48, "guarantee")},
+        pricing_evidence_by_platform={"eventbrite": FREE_EVIDENCE},
+    )
+    row = next(item for item in plan["decisions"] if item["target_id"] == "eventbrite")
+    assert row["citation_validity"] == "complete"
+    assert row["timing_kind"] == "guarantee"
+    assert row["source_verification_status"] == "unverified"
+    assert row["eligibility_status"] == MANUAL_REVIEW_REQUIRED
+    assert row["eligibility_status"] != ELIGIBLE
+    assert row["machine_verification_performed"] is False
+    assert row["latest_safe_submission_datetime"] == "2027-11-28T15:00:00+00:00"
+    assert "eventbrite" in plan["manual_review"]
+    assert "eventbrite" not in plan["recommended_submission_order"]
+    assert "eventbrite" not in plan["eligible"]
+
+
+def test_recorded_human_verification_can_be_eligible(service: ToolService) -> None:
+    kwargs = dict(
+        event_name="Checked Summit",
+        event_start_datetime="2027-12-01T15:00:00Z",
+        event_timezone="UTC",
+        submission_datetime="2027-10-01T00:00:00Z",
+        publication_deadline_buffer_hours=24,
+        official_publication_windows_by_platform={"eventbrite": _official_window(48, "guarantee", human=True)},
+        pricing_evidence_by_platform={"eventbrite": FREE_EVIDENCE},
+    )
+    analysis = service.analyze_event_publishing_deadlines(**kwargs)
+    recommended = service.recommend_submission_targets(**kwargs)
+    preview = service.preview_submission_plan(**kwargs)
+    row = next(item for item in analysis["decisions"] if item["target_id"] == "eventbrite")
+    assert row["eligibility_status"] == ELIGIBLE
+    assert row["source_verification_status"] == "human_verified"
+    assert row["citation_validity"] == "complete"
+    assert row["timing_kind"] == "guarantee"
+    assert row["timing_source"] == "citation"
+    assert row["machine_verification_performed"] is False
+    assert row["timing_live_verified"] is False
+    assert row["human_verification"]["verifier"] == "ops-review-ref-2026-10-29"
+    assert row["human_verification"]["official_source_url"] == "https://www.example.com/official-guidelines"
+    assert row["human_verification"]["verified_at"] == "2026-10-29T16:30:00+00:00"
+    assert row["human_verification"]["hours"] == 48
+    assert row["human_verification"]["kind"] == "guarantee"
+    assert "listings" in row["human_verification"]["claim_checked"]
+    assert "eventbrite" in analysis["recommended_submission_order"]
+    assert recommended["recommended_submission_order"] == analysis["recommended_submission_order"]
+    assert [item["target_id"] for item in preview["preview"]] == analysis["recommended_submission_order"]
+    recommend_row = next(item for item in recommended["decisions"] if item["target_id"] == "eventbrite")
+    preview_row = next(item for item in preview["analysis"]["decisions"] if item["target_id"] == "eventbrite")
+    assert recommend_row["eligibility_status"] == preview_row["eligibility_status"] == ELIGIBLE
+    assert recommend_row["source_verification_status"] == preview_row["source_verification_status"] == "human_verified"
+    assert analysis["machine_verification_performed"] is False
+    assert preview["would_publish"] is False
+
+
+def test_human_verified_estimate_stays_risk_labelled(service: ToolService) -> None:
+    plan = _engine(service).analyze_deadlines(
+        event_name="Estimate Summit",
+        event_start_datetime="2027-12-01T15:00:00Z",
+        event_timezone="UTC",
+        submission_datetime="2027-10-01T00:00:00Z",
+        official_publication_windows_by_platform={"eventbrite": _official_window(48, "estimate", human=True)},
+        pricing_evidence_by_platform={"eventbrite": FREE_EVIDENCE},
+    )
+    row = next(item for item in plan["decisions"] if item["target_id"] == "eventbrite")
+    assert row["source_verification_status"] == "human_verified"
+    assert row["timing_kind"] == "estimate"
+    assert row["eligibility_status"] == ELIGIBLE_WITH_RISK
+    assert row["eligibility_status"] != ELIGIBLE
+    assert "not a guarantee" in row["eligibility_reason"]
+    assert row["machine_verification_performed"] is False
+
+
+def test_human_verified_window_with_unknown_pricing_stays_out(service: ToolService) -> None:
+    plan = _engine(service).analyze_deadlines(
+        event_name="Unpriced Summit",
+        event_start_datetime="2027-12-01T15:00:00Z",
+        event_timezone="UTC",
+        submission_datetime="2027-10-01T00:00:00Z",
+        official_publication_windows_by_platform={"eventbrite": _official_window(48, "guarantee", human=True)},
+    )
+    row = next(item for item in plan["decisions"] if item["target_id"] == "eventbrite")
+    assert row["source_verification_status"] == "human_verified"
+    assert row["free_submission_available"] is None
+    assert row["pricing_status"] == "unknown"
+    assert row["eligibility_status"] == MANUAL_REVIEW_REQUIRED
+    assert "eventbrite" not in plan["recommended_submission_order"]
+
+
+def test_registry_verification_flag_does_not_verify_a_citation() -> None:
+    cited = {**_official_window(72, "guarantee"), "human_verified": True, "machine_verified": False}
+    row = _policy(_platform(research={"publication_window": cited}))
+    assert row["official_publication_hours"] == 72
+    assert row["citation_validity"] == "complete"
+    assert row["source_verification_status"] == "unverified"
+    assert row["human_verification"] is None
+    assert row["machine_verification_performed"] is False
+    assert "not accepted" in row["publication_evidence_note"]
+
+
+def test_stored_human_verification_is_reported_without_a_fetch(
+    service: ToolService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    platform = _platform(
+        platform_id="cited_target",
+        documentation_url="https://www.example.com/official-guidelines",
+        research={
+            "pricing": FREE_EVIDENCE,
+            "publication_window": _official_window(48, "guarantee", human=True),
+        },
+    )
+    registry = PlatformsFile(version="test", platforms=[platform])
+    monkeypatch.setattr(
+        "event_seo_mcp.publishing.intelligence.load_platforms_file",
+        lambda _path: registry,
+    )
+    clocks = _engine(service).research_publication_time("cited_target")
+    assert clocks["live_research_performed"] is False
+    assert clocks["machine_verification_performed"] is False
+    assert clocks["research_timestamp"] is None
+    assert clocks["citation_validity"] == "complete"
+    assert clocks["source_verification_status"] == "human_verified"
+    assert clocks["confidence"] == "human_verified_guarantee"
+    assert clocks["google_indexing_estimate"] == "unknown"
+    assert clocks["human_verification"]["verifier"] == "ops-review-ref-2026-10-29"
+    plan = _engine(service).analyze_deadlines(
+        event_name="Stored Check",
+        event_start_datetime="2027-12-01T15:00:00Z",
+        event_timezone="UTC",
+        submission_datetime="2027-10-01T00:00:00Z",
+    )
+    row = next(item for item in plan["decisions"] if item["target_id"] == "cited_target")
+    assert row["eligibility_status"] == ELIGIBLE
+    assert row["machine_verification_performed"] is False
+    refreshed = _engine(service).refresh_research()
+    assert refreshed["live_research_performed"] is False
+    assert refreshed["machine_verification_performed"] is False
+    assert refreshed["counts"]["machine_verified"] == 0
+    assert refreshed["counts"]["human_verified"] == 1
+    assert refreshed["counts"]["live_researched"] == 0

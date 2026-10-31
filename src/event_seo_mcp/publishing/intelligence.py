@@ -2,7 +2,8 @@
 
 This module reads config/platforms.json. It does not fetch official websites,
 does not invent publication times, and does not connect to an seo-agent API.
-A target is free only when a complete official citation says so.
+A complete citation is not source verification. ELIGIBLE requires a recorded
+human verification of a guarantee. Machine verification is not implemented.
 """
 
 from __future__ import annotations
@@ -49,9 +50,21 @@ MAX_DESCRIPTION_LIMIT = 1000
 
 LIVE_RESEARCH_LIMITATION = (
     "Live research of official submission guidelines is not implemented. "
-    "This tool reads the local registry and any complete citation stored there "
-    "or supplied by the caller. It does not fetch pages, and it does not turn "
-    "a missing value into an official publication time."
+    "This tool reads the local registry and any citation stored there or supplied "
+    "by the caller. It does not fetch pages. A complete citation is not source "
+    "verification, and machine verification is never claimed."
+)
+
+UNVERIFIED = "unverified"
+HUMAN_VERIFIED = "human_verified"
+MACHINE_VERIFIED = "machine_verified"
+_VERIFICATION_FLAG_KEYS = (
+    "source_verification_status",
+    "human_verified",
+    "machine_verified",
+    "machine_verification_performed",
+    "timing_live_verified",
+    "verified",
 )
 
 _SUBMITTED_STATES = {
@@ -71,6 +84,15 @@ _EMPTY_WINDOW = {
     "official_publication_verified_at": None,
     "official_publication_summary": None,
     "publication_evidence_note": None,
+    "citation_validity": "absent",
+    "source_verification_status": UNVERIFIED,
+    "machine_verification_performed": False,
+    "timing_live_verified": False,
+    "verification_warning": None,
+    "human_verification": None,
+    "verifier": None,
+    "claim_checked": None,
+    "verification_verified_at": None,
 }
 
 
@@ -94,6 +116,7 @@ class PublishingIntelligence:
             "timelines_invented": False,
             "seo_agent_connected": False,
             "live_research_performed": False,
+            "machine_verification_performed": False,
             "research_status": "registry_only",
             "research_limitation": LIVE_RESEARCH_LIMITATION,
         }
@@ -105,15 +128,26 @@ class PublishingIntelligence:
         target = policy["targets"][0]
         publication_time = "unknown"
         publication_time_kind = "unknown"
-        confidence = "none"
+        cited = target["official_publication_hours"] is not None or target["official_publication_business_days"] is not None
         if target["official_publication_hours"] is not None:
             publication_time = f"{target['official_publication_hours']} hours"
             publication_time_kind = target["official_publication_kind"]
-            confidence = "registry_citation"
         elif target["official_publication_business_days"] is not None:
             publication_time = f"{target['official_publication_business_days']} business days"
             publication_time_kind = target["official_publication_kind"]
-            confidence = "registry_citation"
+        verification_status = target.get("source_verification_status") or UNVERIFIED
+        if not cited:
+            confidence = "none"
+            publication_confidence = "unknown"
+        elif verification_status == HUMAN_VERIFIED and publication_time_kind == "guarantee":
+            confidence = "human_verified_guarantee"
+            publication_confidence = confidence
+        elif verification_status == HUMAN_VERIFIED:
+            confidence = "human_verified_estimate"
+            publication_confidence = confidence
+        else:
+            confidence = "unverified_citation"
+            publication_confidence = confidence
         return {
             "platform_id": platform_id,
             "research_status": "not_live_researched",
@@ -137,7 +171,12 @@ class PublishingIntelligence:
             "approval_time_kind": "unknown",
             "publication_time": publication_time,
             "publication_time_kind": publication_time_kind,
-            "publication_time_confidence": "unknown" if confidence == "none" else confidence,
+            "publication_time_confidence": publication_confidence,
+            "citation_validity": target.get("citation_validity") or ("complete" if cited else "absent"),
+            "source_verification_status": verification_status,
+            "machine_verification_performed": False,
+            "verification_warning": target.get("verification_warning"),
+            "human_verification": target.get("human_verification"),
             "internal_search_visibility": "unknown",
             "search_engine_indexing_time": "unknown",
             "google_indexing_estimate": "unknown",
@@ -145,15 +184,17 @@ class PublishingIntelligence:
             "ranking_time": "not_estimated",
             "official_source_url": target["official_publication_source_url"] or target["official_guidelines_url"],
             "evidence_summary": (
-                "No live research was performed. Registry fields were read only. "
+                "No live research was performed and no source page was fetched. "
                 + (
-                    "A stored publication citation is reported separately from Google indexing."
-                    if confidence == "registry_citation"
+                    "A stored citation is reported with its verification state. "
+                    "A complete citation is not machine verification and is not a checked guarantee. "
+                    "Google indexing stays separate."
+                    if cited
                     else "Publication time, approval time, and indexing time remain unknown."
                 )
             ),
             "confidence": confidence,
-            "value_origin": "registry_citation" if confidence == "registry_citation" else "unknown",
+            "value_origin": "stored_citation" if cited else "unknown",
             "source_urls": _source_urls(target),
             "registry_sources_are_not_live_research": True,
             "note": (
@@ -166,9 +207,17 @@ class PublishingIntelligence:
     def refresh_research(self) -> dict[str, Any]:
         policies = self.publication_policy()["targets"]
         now = _utc_now().isoformat()
-        counts = {"registry_only": 0, "live_researched": 0, "missing_official_url": 0}
+        counts = {
+            "registry_only": 0,
+            "live_researched": 0,
+            "machine_verified": 0,
+            "human_verified": 0,
+            "missing_official_url": 0,
+        }
         for policy in policies:
             counts["registry_only"] += 1
+            if policy.get("source_verification_status") == HUMAN_VERIFIED:
+                counts["human_verified"] += 1
             if not policy["base_url"] and not policy["official_guidelines_url"]:
                 counts["missing_official_url"] += 1
             snapshot = dict(policy)
@@ -190,6 +239,7 @@ class PublishingIntelligence:
             "counts": counts,
             "research_status": "registry_only",
             "live_research_performed": False,
+            "machine_verification_performed": False,
             "research_method": "registry_read",
             "limitation": LIVE_RESEARCH_LIMITATION,
             "persisted": True,
@@ -439,7 +489,8 @@ class PublishingIntelligence:
                     )
                 )
             if platform_id in official_overlay:
-                row.update(_accepted_window_fields(official_overlay[platform_id]))
+                cited = official_overlay[platform_id]
+                row.update(_accepted_window_fields(cited, _verification_record(cited)))
             decisions.append(
                 self._decide(
                     row,
@@ -491,6 +542,7 @@ class PublishingIntelligence:
             "indexing_is_not_publication": True,
             "publication_guaranteed": False,
             "live_research_performed": False,
+            "machine_verification_performed": False,
         }
 
     def preview_plan(self, **kwargs: Any) -> dict[str, Any]:
@@ -509,7 +561,11 @@ class PublishingIntelligence:
                     "eligibility_reason": row["eligibility_reason"],
                     "timing_source": row["timing_source"],
                     "timing_kind": row["timing_kind"],
+                    "citation_validity": row["citation_validity"],
+                    "source_verification_status": row["source_verification_status"],
+                    "verification_warning": row["verification_warning"],
                     "latest_safe_submission_datetime": row["latest_safe_submission_datetime"],
+                    "machine_verification_performed": False,
                     "dry_run": True,
                     "would_publish": False,
                 }
@@ -518,6 +574,8 @@ class PublishingIntelligence:
             "preview": previews,
             "dry_run": True,
             "would_publish": False,
+            "live_research_performed": False,
+            "machine_verification_performed": False,
             "analysis": analysis,
         }
 
@@ -563,7 +621,8 @@ class PublishingIntelligence:
         if policy["free_submission_available"] is False and not allow_paid:
             return _decision_row(
                 policy, NOT_FREE,
-                "Official evidence says a free submission is not available, and paid options are disabled for this plan.",
+                "A pricing citation says free submission is unavailable, and paid options are disabled for this plan. "
+                "That citation was not machine-checked.",
                 start, planned, None, None, "unknown", "unknown",
             )
         if virtual_event is True and policy["supports_virtual_events"] is False:
@@ -587,8 +646,8 @@ class PublishingIntelligence:
         timing_source = "unknown"
         timing_kind = "unknown"
         if official_hours is not None or official_days is not None:
-            timing_source = "official_evidence"
-            timing_kind = official_kind or "guarantee"
+            timing_source = "citation"
+            timing_kind = official_kind or "unknown"
             if official_days is not None:
                 business_days = official_days
                 hours = official_days * 24
@@ -622,30 +681,44 @@ class PublishingIntelligence:
             latest = start - timedelta(hours=hours) - timedelta(hours=buffer_hours)
             window_label = f"{hours} hours"
         buffer_label = f"{buffer_hours} hour safety buffer"
+        verified = policy.get("source_verification_status") == HUMAN_VERIFIED
         if planned > latest:
             status = DEADLINE_PASSED
             reason = (
                 f"The latest safe submission time, using {window_label} plus the {buffer_label}, "
                 "is before the planning time."
             )
-        elif timing_source == "official_evidence" and timing_kind == "guarantee":
-            status = ELIGIBLE
+            if timing_source == "citation" and not verified:
+                reason += " The source page was not checked, so this figure is not a verified guarantee."
+        elif timing_source == "citation" and not verified:
+            status = MANUAL_REVIEW_REQUIRED
             reason = (
-                f"A cited official source states a guaranteed window of {window_label}. "
-                "This process did not re-fetch that page. "
+                f"A structurally complete citation lists {window_label} as a {timing_kind}. "
+                "The source page was not checked, so kind guarantee does not make this ELIGIBLE. "
+                f"The unverified window plus the {buffer_label} would fit before the event start "
+                "and is shown for manual review only."
+            )
+        elif timing_source == "citation" and timing_kind == "guarantee":
+            status = ELIGIBLE
+            audit = policy.get("human_verification") or {}
+            reason = (
+                f"Human verification by {audit.get('verifier')} at {audit.get('verified_at')} "
+                f"accepted a guaranteed window of {window_label}. "
+                "No page was fetched and machine verification was not performed. "
+                f"Claim checked: {audit.get('claim_checked')} "
                 f"The window plus the {buffer_label} fits before the event start."
             )
-        elif timing_source == "official_evidence":
+        elif timing_source == "citation":
             status = ELIGIBLE_WITH_RISK
             reason = (
-                f"A cited official source gives an estimate of {window_label}, not a guarantee. "
+                f"Human verification accepted an estimate of {window_label}, not a guarantee. "
                 f"The estimate plus the {buffer_label} fits before the event start."
             )
         elif timing_source == "caller_supplied":
             status = ELIGIBLE_WITH_RISK
             reason = (
                 f"Caller supplied a window of {window_label}. "
-                "This is not an official guarantee and was not verified by a live fetch. "
+                "This is not an official guarantee and the source was not checked. "
                 f"The supplied window plus the {buffer_label} fits before the event start."
             )
         else:
@@ -680,16 +753,24 @@ def _decision_row(
     timing_source: str,
     timing_kind: str,
 ) -> dict[str, Any]:
-    if timing_source == "official_evidence" and timing_kind == "estimate":
-        confidence = "cited_estimate"
-    elif timing_source == "official_evidence":
-        confidence = "cited_official_source"
+    verification_status = policy.get("source_verification_status") or UNVERIFIED
+    if timing_source == "citation" and verification_status == HUMAN_VERIFIED and timing_kind == "guarantee":
+        confidence = "human_verified_guarantee"
+    elif timing_source == "citation" and verification_status == HUMAN_VERIFIED:
+        confidence = "human_verified_estimate"
+    elif timing_source == "citation":
+        confidence = "unverified_citation"
     elif timing_source == "caller_supplied":
         confidence = "caller_supplied"
     elif timing_source == "heuristic":
         confidence = "heuristic"
     else:
-        confidence = policy.get("publication_time_confidence") or "unknown"
+        confidence = "unknown"
+    warning = policy.get("verification_warning")
+    if timing_source == "caller_supplied":
+        warning = "Caller-supplied timing is not a checked official source."
+    elif timing_source == "heuristic":
+        warning = "Heuristic timing is not a checked official source."
     return {
         "target_id": policy["target_id"],
         "website_name": policy["website_name"],
@@ -703,6 +784,11 @@ def _decision_row(
         "publication_time_confidence": confidence,
         "timing_source": timing_source,
         "timing_kind": timing_kind,
+        "citation_validity": policy.get("citation_validity") or "absent",
+        "source_verification_status": verification_status if timing_source == "citation" else UNVERIFIED,
+        "verification_warning": warning,
+        "human_verification": policy.get("human_verification") if timing_source == "citation" else None,
+        "machine_verification_performed": False,
         "conservative_publication_hours": hours,
         "latest_safe_submission_datetime": latest.isoformat() if latest else None,
         "hours_until_event": round((start - planned).total_seconds() / 3600, 2),
@@ -780,7 +866,7 @@ def _policy(platform: PlatformRecord) -> dict[str, Any]:
         "approval_time_basis": "unknown",
         "moderation_approval_time": "unknown",
         "publication_time_basis": window["official_publication_kind"] or "not_guaranteed",
-        "publication_time_confidence": "unknown" if window["official_publication_kind"] is None else "registry_citation",
+        "publication_time_confidence": _window_confidence(window),
         "publication_time_source_url": window["official_publication_source_url"] or guidelines,
         "publication_time_verified_at": window["official_publication_verified_at"] or verified_at,
         "search_visibility_time": "unknown",
@@ -832,6 +918,8 @@ def _pricing_from_evidence(packet: Any, registry_paid: bool | None) -> dict[str,
         "pricing_verified_at": None,
         "free_listing_conditions": None,
         "pricing_confidence": "none",
+        "pricing_citation_validity": "absent",
+        "pricing_source_verification_status": UNVERIFIED,
         "pricing_live_verified": False,
         "registry_paid_submission_possible": registry_paid,
     }
@@ -840,6 +928,7 @@ def _pricing_from_evidence(packet: Any, registry_paid: bool | None) -> dict[str,
     problem = _pricing_problem(packet)
     if problem:
         unknown["pricing_reason"] = f"Pricing evidence was not accepted: {problem} {registry_note}"
+        unknown["pricing_citation_validity"] = "invalid"
         return unknown
     free = packet.get("free_submission_available")
     paid = packet.get("paid_options_available")
@@ -867,7 +956,9 @@ def _pricing_from_evidence(packet: Any, registry_paid: bool | None) -> dict[str,
         "free_listing_conditions": (
             str(packet.get("free_conditions")).strip() if free is True and packet.get("free_conditions") else None
         ),
-        "pricing_confidence": "cited_official_source",
+        "pricing_confidence": "unverified_citation",
+        "pricing_citation_validity": "complete",
+        "pricing_source_verification_status": UNVERIFIED,
         "pricing_live_verified": False,
         "registry_paid_submission_possible": registry_paid,
     }
@@ -905,20 +996,44 @@ def _pricing_problem(packet: Any) -> str | None:
     return None
 
 
+def _window_confidence(window: dict[str, Any]) -> str:
+    if window.get("official_publication_kind") is None:
+        return "unknown"
+    if window.get("source_verification_status") == HUMAN_VERIFIED and window.get("official_publication_kind") == "guarantee":
+        return "human_verified_guarantee"
+    if window.get("source_verification_status") == HUMAN_VERIFIED:
+        return "human_verified_estimate"
+    return "unverified_citation"
+
+
 def _registry_window_fields(raw: Any) -> dict[str, Any]:
     if raw is None:
         return dict(_EMPTY_WINDOW)
-    problem = _official_window_problem(raw)
-    if problem:
+    structure = _citation_structure_problem(raw)
+    if structure:
         fields = dict(_EMPTY_WINDOW)
-        fields["publication_evidence_note"] = f"Stored publication evidence was not used: {problem}"
+        fields["citation_validity"] = "invalid"
+        fields["publication_evidence_note"] = f"Stored publication evidence was not used: {structure}"
         return fields
-    return _accepted_window_fields(raw)
+    verification_problem = _verification_metadata_problem(raw)
+    if verification_problem:
+        cleaned = {
+            key: value
+            for key, value in raw.items()
+            if key not in _VERIFICATION_FLAG_KEYS and key != "human_verification"
+        }
+        fields = _accepted_window_fields(cleaned, _unverified_verification())
+        fields["publication_evidence_note"] = (
+            f"Verification metadata was not accepted: {verification_problem} "
+            "The citation stays unverified."
+        )
+        return fields
+    return _accepted_window_fields(raw, _verification_record(raw))
 
 
-def _accepted_window_fields(item: dict[str, Any]) -> dict[str, Any]:
+def _accepted_window_fields(item: dict[str, Any], verification: dict[str, Any]) -> dict[str, Any]:
     summary = str(item.get("summary") or item.get("reason") or "").strip()
-    return {
+    fields = {
         "official_publication_hours": item.get("hours"),
         "official_publication_business_days": item.get("business_days"),
         "official_publication_kind": item.get("kind"),
@@ -927,9 +1042,64 @@ def _accepted_window_fields(item: dict[str, Any]) -> dict[str, Any]:
         "official_publication_summary": summary,
         "publication_evidence_note": None,
     }
+    fields.update(verification)
+    return fields
+
+
+def _unverified_verification() -> dict[str, Any]:
+    return {
+        "citation_validity": "complete",
+        "source_verification_status": UNVERIFIED,
+        "machine_verification_performed": False,
+        "timing_live_verified": False,
+        "verification_warning": (
+            "The citation is structurally complete, but the source page was not checked. "
+            "A kind of guarantee does not prove the source supports that window."
+        ),
+        "human_verification": None,
+        "verifier": None,
+        "claim_checked": None,
+        "verification_verified_at": None,
+    }
+
+
+def _verification_record(item: dict[str, Any]) -> dict[str, Any]:
+    human = item.get("human_verification")
+    if not human:
+        return _unverified_verification()
+    checked_at = _parse_zoned(str(human.get("verified_at") or ""), "UTC")
+    assert checked_at is not None
+    record = {
+        "official_source_url": _http_url(human.get("official_source_url")),
+        "verified_at": checked_at.isoformat(),
+        "verifier": str(human.get("verifier")).strip(),
+        "claim_checked": str(human.get("claim_checked")).strip(),
+        "hours": human.get("hours"),
+        "business_days": human.get("business_days"),
+        "kind": human.get("kind"),
+    }
+    verified = _unverified_verification()
+    verified.update(
+        {
+            "source_verification_status": HUMAN_VERIFIED,
+            "verification_warning": None,
+            "human_verification": record,
+            "verifier": record["verifier"],
+            "claim_checked": record["claim_checked"],
+            "verification_verified_at": record["verified_at"],
+        }
+    )
+    return verified
 
 
 def _official_window_problem(item: Any) -> str | None:
+    structure = _citation_structure_problem(item)
+    if structure:
+        return structure
+    return _verification_metadata_problem(item)
+
+
+def _citation_structure_problem(item: Any) -> str | None:
     if not isinstance(item, dict):
         return "publication window evidence must be an object"
     hours = item.get("hours")
@@ -951,6 +1121,47 @@ def _official_window_problem(item: Any) -> str | None:
     summary = item.get("summary") or item.get("reason")
     if not isinstance(summary, str) or len(summary.strip()) < 12:
         return "summary must explain the cited publication window"
+    return None
+
+
+def _verification_metadata_problem(item: dict[str, Any]) -> str | None:
+    for key in _VERIFICATION_FLAG_KEYS:
+        if key in item:
+            return (
+                f"{key} cannot be supplied as proof of verification. "
+                "Record a human_verification object, or leave the citation unverified."
+            )
+    human = item.get("human_verification")
+    if human is None:
+        return None
+    return _human_verification_problem(human, item)
+
+
+def _human_verification_problem(human: Any, citation: dict[str, Any]) -> str | None:
+    if not isinstance(human, dict):
+        return "human_verification must be an object"
+    for key in _VERIFICATION_FLAG_KEYS:
+        if key in human:
+            return f"human_verification.{key} is not accepted"
+    if _http_url(human.get("official_source_url")) is None:
+        return "human_verification.official_source_url must be an http or https URL"
+    if _http_url(human.get("official_source_url")) != _http_url(citation.get("official_source_url")):
+        return "human_verification.official_source_url must match the citation URL"
+    verified_at = human.get("verified_at")
+    if not isinstance(verified_at, str) or not _has_time_component(verified_at) or _parse_zoned(verified_at, "UTC") is None:
+        return "human_verification.verified_at must be an ISO-8601 datetime with a time component"
+    verifier = human.get("verifier")
+    if not isinstance(verifier, str) or len(verifier.strip()) < 3:
+        return "human_verification.verifier must identify the person or approved reference"
+    claim = human.get("claim_checked")
+    if not isinstance(claim, str) or len(claim.strip()) < 12:
+        return "human_verification.claim_checked must describe the specific claim that was checked"
+    if human.get("kind") != citation.get("kind"):
+        return "human_verification.kind must match the citation kind"
+    if human.get("hours") != citation.get("hours") or human.get("business_days") != citation.get("business_days"):
+        return "human_verification window must match the cited hours or business days"
+    if (human.get("hours") is None) == (human.get("business_days") is None):
+        return "human_verification must include exactly one of hours or business_days"
     return None
 
 
