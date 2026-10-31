@@ -32,17 +32,17 @@ Pricing uses four separate fields:
 | Field | Meaning |
 | --- | --- |
 | `pricing_citation_validity` | `complete` when a citation has an `http` or `https` URL, an ISO-8601 date, a written reason, and a free or paid statement. `absent` when no citation was supplied. `invalid` when the packet could not be read. Structural completeness is not verification. |
-| `pricing_source_verification_status` | `unverified` for every citation this server can read. No trusted pricing workflow is configured. |
-| `pricing_status` | What the evidence claims: `unknown`, `claimed_free`, `claimed_paid`, or `claimed_not_free`. The input classification `verified_free` is a claim. It is never copied into this field. |
-| `pricing_live_verified` | Always false. This server does not fetch the pricing page. |
+| `pricing_source_verification_status` | `unverified` for a citation. `machine_verified` only when a stored trusted pricing record exists. |
+| `pricing_status` | A citation is `unknown`, `claimed_free`, `claimed_paid`, or `claimed_not_free`. `verified_free` is never copied from caller input. A trusted record uses `trusted_free` or `trusted_not_free`. |
+| `pricing_live_verified` | False for citations. True only when the stored pricing record came from a live structured-document fetch. |
 
-`free_submission_available` and `paid_options_available` stay null on policy results and on deadline decisions. A citation does not set them. The claim itself is `claimed_free_submission`, `claimed_paid_options`, and `claimed_free_conditions`. `free_listing_conditions` stays null because those conditions were not authenticated.
+A citation leaves `free_submission_available` and `paid_options_available` null. The claim itself is `claimed_free_submission`, `claimed_paid_options`, and `claimed_free_conditions`. `free_listing_conditions` stays null. Those booleans become true or false only when a trusted pricing record says so explicitly.
 
-`pricing_verified_at` stays null. The date written on the citation is `pricing_citation_recorded_at`. `pricing_evidence_url` is the supplied URL, and `pricing_reason` repeats the supplied reason and states that the citation was not authenticated.
+For a citation, `pricing_verified_at` stays null. The date written on the citation is `pricing_citation_recorded_at`. `pricing_evidence_url` is the supplied URL, and `pricing_reason` states that the citation was not authenticated. A trusted record sets `pricing_verified_at` to the server's retrieval time, not to a date inside the caller's packet.
 
 A caller flag such as `pricing_live_verified`, `pricing_verified`, `pricing_source_verification_status`, `human_verified`, or `verified` is rejected as `validation_error` by analysis, recommendation, and preview. The same flag stored in the registry is not accepted, so that row stays `unknown` rather than `claimed_free`. A `verified_free` classification that also sets `free_submission_available` to false, or a `paid_option` classification that sets `paid_options_available` to false, is invalid and stays `unknown`.
 
-Unknown, claimed free, claimed paid, and claimed not-free pricing are excluded from `recommended_submission_order`. When a window would otherwise fit, the timing result is `MANUAL_REVIEW_REQUIRED` and the calculated deadline stays visible. `NOT_FREE` is reserved for a trusted record of `free_submission_available: false`. No current input creates that record, so a paid citation is not labeled `NOT_FREE`. `free_targets` counts only trusted free availability, which stays 0.
+Unknown, claimed free, claimed paid, and claimed not-free pricing are excluded from `recommended_submission_order`. When a window would otherwise fit, the timing result is `MANUAL_REVIEW_REQUIRED` and the calculated deadline stays visible. `NOT_FREE` is reserved for a trusted record of `free_submission_available: false`. A paid citation is not labeled `NOT_FREE`. `free_targets` counts only trusted free availability.
 
 ## Citation validity and source verification
 
@@ -51,7 +51,7 @@ These fields are separate:
 | Field | Meaning |
 | --- | --- |
 | `citation_validity` | `complete` when the URL, date, summary, and window are structurally present. `absent` when no citation was supplied. `invalid` when a stored citation could not be read. |
-| `source_verification_status` | `unverified` for every citation this server can read today. `human_verified` would require a trusted workflow that authenticates the verifier. That workflow is not configured, and a caller-supplied name is not it. `machine_verified` is reserved for a fetch-and-check process that this server does not run. |
+| `source_verification_status` | `unverified` for a citation. A caller-supplied name is not `human_verified`. `machine_verified` is set only from a stored structured-document publication record. |
 | `timing_kind` | `guarantee` or `estimate` as written on the citation, or `caller_supplied` / `heuristic` when there is no citation. |
 | `eligibility_status` | The planning result. It is not a synonym for any of the fields above. |
 
@@ -59,9 +59,9 @@ These fields are separate:
 
 `human_verified` is not produced by this server. Supplying `human_verification` does not create a trusted record. The fields in that object are checked only so a mismatched or boolean forgery is rejected. A structurally complete forgery stays `unverified`, `human_verification` in the result is null, and the warning says the name and claim were not authenticated.
 
-`machine_verified` would mean this process fetched the page and confirmed the claim. That process is not implemented. Every planning and research response sets `machine_verification_performed` and `live_research_performed` to false.
+`machine_verified` means a privileged tool fetched the registered official URL and accepted a structured document. Planning, research, and preview calls do not fetch, so they keep `machine_verification_performed` and `live_research_performed` false even when they report a stored record.
 
-A target can become `ELIGIBLE` only after a trusted verification workflow exists and records a checked guarantee. No such workflow is configured, so publication citations do not become `ELIGIBLE`.
+A publication citation does not become `ELIGIBLE`. `ELIGIBLE` requires a stored machine-verified guarantee and trusted free pricing. Those records are independent. One without the other stays out of the default plan, except that trusted free pricing with caller-supplied or heuristic timing can be `ELIGIBLE_WITH_RISK`.
 
 ## Publication windows
 
@@ -80,11 +80,15 @@ The same arguments are accepted by:
 | Complete citation with `kind: "guarantee"` | `unverified` | unknown or any claim | `MANUAL_REVIEW_REQUIRED`. The calculated window stays visible, with a warning. It is not `ELIGIBLE`. |
 | Complete citation with `kind: "estimate"` | `unverified` | unknown or any claim | `MANUAL_REVIEW_REQUIRED`. |
 | Same citation plus a `human_verification` name, timestamp, and claim | `unverified` | unknown or any claim | `MANUAL_REVIEW_REQUIRED`. The supplied record is not authenticated. |
-| `documented_hours_by_platform` or `documented_business_days_by_platform` | not a citation | unknown, `claimed_free`, `claimed_paid`, or `claimed_not_free` | `MANUAL_REVIEW_REQUIRED`. The caller window is not an official guarantee, and the pricing claim is not trusted. |
-| `conservative_fallback_hours` | heuristic | unknown or any claim | `MANUAL_REVIEW_REQUIRED` for the same pricing reason. |
+| `documented_hours_by_platform` or `documented_business_days_by_platform` | not a citation | unknown or any claim | `MANUAL_REVIEW_REQUIRED`. |
+| Caller hours or business days | not a citation | `trusted_free` | `ELIGIBLE_WITH_RISK`. The window is still not an official guarantee. |
+| `conservative_fallback_hours` | heuristic | unknown or any claim | `MANUAL_REVIEW_REQUIRED`. |
+| Heuristic hours | heuristic | `trusted_free` | `ELIGIBLE_WITH_RISK`. |
+| Stored machine-verified guarantee | `machine_verified` | `trusted_free` | `ELIGIBLE`. |
+| Stored machine-verified guarantee | `machine_verified` | unknown, claimed, or `trusted_not_free` | `MANUAL_REVIEW_REQUIRED`, or `NOT_FREE` when trusted pricing says free is false. |
 | none of the above | unknown timeline | any | `PUBLICATION_TIME_UNKNOWN`, excluded from the default plan. |
 
-`ELIGIBLE` and `ELIGIBLE_WITH_RISK` would require trusted free availability. No configured workflow sets `free_submission_available` to true, so those states are not produced from a pricing citation, a URL, a date, a reason, or a boolean flag. Negative numbers, booleans, strings, values above 366 days, conflicting windows, pricing verification flags, and invalid verification metadata are `validation_error` on all three tools. Business-day windows skip weekends. An event start that is not after the planning time is `EVENT_PAST`.
+A pricing citation, URL, date, reason, or boolean flag does not set trusted free availability. Negative numbers, booleans, strings, values above 366 days, conflicting windows, pricing verification flags, and invalid verification metadata are `validation_error` on all three planning tools. Caller timing or pricing evidence for a target that already has a trusted record is also `validation_error`; it does not overwrite that record. Business-day windows skip weekends. An event start that is not after the planning time is `EVENT_PAST`.
 
 `recommend_submission_targets` and `preview_submission_plan` use those same states. The preview sets `would_publish` to false.
 
@@ -105,13 +109,18 @@ Read-only planning:
 - `analyze_event_publishing_deadlines`
 - `recommend_submission_targets`
 - `preview_submission_plan`
+- `verify_publication_source`
+- `verify_pricing_source`
+
+`verify_publication_source` and `verify_pricing_source` are privileged and independent. Both fail closed unless `LIVE_SOURCE_VERIFICATION_ENABLED` is true and the caller presents `VERIFICATION_OPERATOR_TOKEN`. They fetch only the platform's registered HTTPS documentation URL, or the official homepage when that documentation URL is missing. They pin DNS to a public address, refuse redirects to another host or to a private, loopback, link-local, or metadata address, and limit time, size, and redirects. HTML and unstructured text stay `unknown`. A document verifies only when it is JSON `schema_version` 1, names the same platform, and states the requested evidence. Pricing must include an explicit `free_submission_available` boolean. A missing paid option does not prove that submission is free. A failed fetch removes that evidence type's trusted record so a stale success cannot keep a target eligible. Unauthorized and disabled calls do not fetch and do not remove a record. Audit rows record the actor, URL, retrieval time, outcome, summary, and method, and they do not store the operator token.
 
 `submit_event_dry_run` calls the existing submit path with dry-run forced on and `authorize_publication` forced off. Live publishing stays disabled unless a later, explicit authorization path is used. Existing Sheets tools and `/api/submissions` are unchanged.
 
 ## Still required before production
 
 - Live publication remains off by default. Do not send `authorize_publication: true` while testing.
-- No trusted verification workflow is configured, so no publication citation becomes `ELIGIBLE` and no pricing citation becomes trusted free.
+- Live source verification is off by default. Leave `LIVE_SOURCE_VERIFICATION_ENABLED` false until an operator sets it and a token deliberately.
+- A publication citation still does not become `ELIGIBLE`, and a pricing citation still does not become trusted free.
 - Official pages are not fetched. `machine_verified` stays unused until a reviewed extractor confirms the claim and otherwise returns `unknown`.
 - A future trusted workflow has to authenticate the verifier. Storing a name in the registry or in a tool argument is not that workflow.
 - `seo-agent` is not configured.

@@ -4,9 +4,9 @@ This module reads config/platforms.json. It does not fetch official websites,
 does not invent publication times, and does not connect to an seo-agent API.
 A complete citation is not source verification. A verifier name, timestamp,
 and claim are not authentication. A pricing classification such as
-verified_free is a claim, not proof that submission is free. No trusted
-verification workflow is configured, so caller-supplied and registry-stored
-verification records stay unverified. Machine verification is not implemented.
+verified_free is a claim, not proof that submission is free. Caller-supplied
+and registry-stored verification records stay unverified. Machine verification
+is only the privileged structured-document fetch, which is disabled by default.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from event_seo_mcp.database.repository import Repository
 from event_seo_mcp.discovery.platform_discovery import load_platforms_file
 from event_seo_mcp.providers.template_provider import TemplateProvider
+from event_seo_mcp.publishing.source_verification import STRUCTURED_DOCUMENT, apply_trusted_records
 from event_seo_mcp.schemas.platform import PlatformRecord
 from event_seo_mcp.settings import Settings
 
@@ -52,10 +53,10 @@ MAX_TITLE_LIMIT = 300
 MAX_DESCRIPTION_LIMIT = 1000
 
 LIVE_RESEARCH_LIMITATION = (
-    "Live research of official submission guidelines is not implemented. "
-    "This tool reads the local registry and any citation stored there or supplied "
-    "by the caller. It does not fetch pages. A complete citation is not source "
-    "verification, and machine verification is never claimed."
+    "Policy, research, and planning tools do not fetch official pages. "
+    "They read the local registry, caller citations, and any trusted record already stored. "
+    "A complete citation is not source verification. Machine verification is a separate "
+    "privileged fetch and is disabled unless LIVE_SOURCE_VERIFICATION_ENABLED is set."
 )
 
 UNVERIFIED = "unverified"
@@ -119,6 +120,8 @@ class PublishingIntelligence:
                 return {"error": "platform_not_found", "platform_id": platform_id}
             rows = [match]
         policies = [_policy(row) for row in rows]
+        for item in policies:
+            apply_trusted_records(self.repo, item)
         return {
             "count": len(policies),
             "targets": policies,
@@ -154,6 +157,12 @@ class PublishingIntelligence:
         elif verification_status == HUMAN_VERIFIED:
             confidence = "human_verified_estimate"
             publication_confidence = confidence
+        elif verification_status == MACHINE_VERIFIED and publication_time_kind == "guarantee":
+            confidence = "machine_verified_guarantee"
+            publication_confidence = confidence
+        elif verification_status == MACHINE_VERIFIED:
+            confidence = "machine_verified_estimate"
+            publication_confidence = confidence
         else:
             confidence = "unverified_citation"
             publication_confidence = confidence
@@ -176,7 +185,12 @@ class PublishingIntelligence:
             "pricing_citation_recorded_at": target.get("pricing_citation_recorded_at"),
             "pricing_citation_validity": target.get("pricing_citation_validity") or "absent",
             "pricing_source_verification_status": target.get("pricing_source_verification_status") or UNVERIFIED,
-            "pricing_live_verified": False,
+            "pricing_verification_method": target.get("pricing_verification_method"),
+            "pricing_retrieved_at": target.get("pricing_retrieved_at"),
+            "pricing_live_verified": bool(
+                target.get("pricing_live_verified")
+                and target.get("pricing_source_verification_status") == MACHINE_VERIFIED
+            ),
             "claimed_free_submission": target.get("claimed_free_submission"),
             "claimed_paid_options": target.get("claimed_paid_options"),
             "claimed_free_conditions": target.get("claimed_free_conditions"),
@@ -191,6 +205,8 @@ class PublishingIntelligence:
             "publication_time_confidence": publication_confidence,
             "citation_validity": target.get("citation_validity") or ("complete" if cited else "absent"),
             "source_verification_status": verification_status,
+            "publication_verification_method": target.get("publication_verification_method"),
+            "publication_retrieved_at": target.get("publication_retrieved_at"),
             "machine_verification_performed": False,
             "verification_warning": target.get("verification_warning"),
             "human_verification": None,
@@ -201,15 +217,10 @@ class PublishingIntelligence:
             "indexing_separate_from_publication": True,
             "ranking_time": "not_estimated",
             "official_source_url": target["official_publication_source_url"] or target["official_guidelines_url"],
-            "evidence_summary": (
-                "No live research was performed and no source page was fetched. "
-                + (
-                    "A stored citation is reported with its verification state. "
-                    "A complete citation is not machine verification and is not a checked guarantee. "
-                    "Google indexing stays separate."
-                    if cited
-                    else "Publication time, approval time, and indexing time remain unknown."
-                )
+            "evidence_summary": _research_summary(
+                cited=cited,
+                machine_verified=verification_status == MACHINE_VERIFIED
+                or target.get("pricing_source_verification_status") == MACHINE_VERIFIED,
             ),
             "confidence": confidence,
             "value_origin": "stored_citation" if cited else "unknown",
@@ -236,6 +247,8 @@ class PublishingIntelligence:
             counts["registry_only"] += 1
             if policy.get("source_verification_status") == HUMAN_VERIFIED:
                 counts["human_verified"] += 1
+            if policy.get("source_verification_status") == MACHINE_VERIFIED:
+                counts["machine_verified"] += 1
             if not policy["base_url"] and not policy["official_guidelines_url"]:
                 counts["missing_official_url"] += 1
             snapshot = dict(policy)
@@ -490,6 +503,11 @@ class PublishingIntelligence:
         business_override = documented_business_days_by_platform or {}
         official_overlay = official_publication_windows_by_platform or {}
         pricing_overlay = pricing_evidence_by_platform or {}
+        locked = _trusted_lock_conflict(
+            policies, hours_override, business_override, official_overlay, pricing_overlay
+        )
+        if locked:
+            return {"error": "validation_error", "message": locked}
         conflict = _timing_conflicts(policies, hours_override, business_override, official_overlay)
         if conflict:
             return {"error": "validation_error", "message": conflict}
@@ -699,22 +717,42 @@ class PublishingIntelligence:
             latest = start - timedelta(hours=hours) - timedelta(hours=buffer_hours)
             window_label = f"{hours} hours"
         buffer_label = f"{buffer_hours} hour safety buffer"
-        verified = policy.get("source_verification_status") == HUMAN_VERIFIED
+        verification_status = policy.get("source_verification_status") or UNVERIFIED
+        machine_verified = (
+            verification_status == MACHINE_VERIFIED
+            and policy.get("publication_verification_method") == STRUCTURED_DOCUMENT
+        )
+        trusted_publication = machine_verified or verification_status == HUMAN_VERIFIED
         if planned > latest:
             status = DEADLINE_PASSED
             reason = (
                 f"The latest safe submission time, using {window_label} plus the {buffer_label}, "
                 "is before the planning time."
             )
-            if timing_source == "citation" and not verified:
+            if timing_source == "citation" and not trusted_publication:
                 reason += " The source page was not checked, so this figure is not a verified guarantee."
-        elif timing_source == "citation" and not verified:
+        elif timing_source == "citation" and not trusted_publication:
             status = MANUAL_REVIEW_REQUIRED
             reason = (
                 f"A structurally complete citation lists {window_label} as a {timing_kind}. "
                 "The source page was not checked, so kind guarantee does not make this ELIGIBLE. "
                 f"The unverified window plus the {buffer_label} would fit before the event start "
                 "and is shown for manual review only."
+            )
+        elif timing_source == "citation" and machine_verified and timing_kind == "guarantee":
+            status = ELIGIBLE
+            reason = (
+                f"A structured official document fetched from {policy.get('official_publication_source_url')} "
+                f"at {policy.get('publication_retrieved_at')} stated a guaranteed window of {window_label}. "
+                "Verification method: structured_official_document. "
+                f"The window plus the {buffer_label} fits before the event start."
+            )
+        elif timing_source == "citation" and machine_verified:
+            status = ELIGIBLE_WITH_RISK
+            reason = (
+                f"A structured official document fetched at {policy.get('publication_retrieved_at')} "
+                f"stated an estimate of {window_label}, not a guarantee. "
+                f"The estimate plus the {buffer_label} fits before the event start."
             )
         elif timing_source == "citation" and timing_kind == "guarantee":
             status = ELIGIBLE
@@ -773,7 +811,11 @@ def _decision_row(
     timing_kind: str,
 ) -> dict[str, Any]:
     verification_status = policy.get("source_verification_status") or UNVERIFIED
-    if timing_source == "citation" and verification_status == HUMAN_VERIFIED and timing_kind == "guarantee":
+    if timing_source == "citation" and verification_status == MACHINE_VERIFIED and timing_kind == "guarantee":
+        confidence = "machine_verified_guarantee"
+    elif timing_source == "citation" and verification_status == MACHINE_VERIFIED:
+        confidence = "machine_verified_estimate"
+    elif timing_source == "citation" and verification_status == HUMAN_VERIFIED and timing_kind == "guarantee":
         confidence = "human_verified_guarantee"
     elif timing_source == "citation" and verification_status == HUMAN_VERIFIED:
         confidence = "human_verified_estimate"
@@ -804,14 +846,28 @@ def _decision_row(
         "pricing_citation_recorded_at": policy.get("pricing_citation_recorded_at"),
         "pricing_citation_validity": policy.get("pricing_citation_validity") or "absent",
         "pricing_source_verification_status": policy.get("pricing_source_verification_status") or UNVERIFIED,
-        "pricing_live_verified": False,
+        "pricing_verification_method": policy.get("pricing_verification_method"),
+        "pricing_retrieved_at": policy.get("pricing_retrieved_at"),
+        "pricing_live_verified": bool(
+            policy.get("pricing_live_verified") and policy.get("pricing_source_verification_status") == MACHINE_VERIFIED
+        ),
         "claimed_free_submission": policy.get("claimed_free_submission"),
         "claimed_paid_options": policy.get("claimed_paid_options"),
         "publication_time_confidence": confidence,
         "timing_source": timing_source,
         "timing_kind": timing_kind,
         "citation_validity": policy.get("citation_validity") or "absent",
-        "source_verification_status": verification_status if timing_source == "citation" else UNVERIFIED,
+        "source_verification_status": _reported_publication_status(policy, verification_status, timing_source),
+        "publication_verification_method": (
+            policy.get("publication_verification_method")
+            if timing_source == "citation" or policy.get("trusted_publication_locked")
+            else None
+        ),
+        "publication_retrieved_at": (
+            policy.get("publication_retrieved_at")
+            if timing_source == "citation" or policy.get("trusted_publication_locked")
+            else None
+        ),
         "verification_warning": warning,
         "human_verification": None,
         "verifier": None,
@@ -822,7 +878,12 @@ def _decision_row(
         "latest_safe_submission_datetime": latest.isoformat() if latest else None,
         "hours_until_event": round((start - planned).total_seconds() / 3600, 2),
         "search_indexing_separate": True,
-        "timing_live_verified": False,
+        "timing_live_verified": bool(
+            timing_source == "citation"
+            and verification_status == MACHINE_VERIFIED
+            and policy.get("publication_verification_method") == STRUCTURED_DOCUMENT
+            and policy.get("timing_live_verified")
+        ),
         "official_source_url": policy.get("official_publication_source_url"),
     }
 
@@ -1050,11 +1111,67 @@ def _pricing_problem(packet: Any) -> str | None:
 def _window_confidence(window: dict[str, Any]) -> str:
     if window.get("official_publication_kind") is None:
         return "unknown"
+    if window.get("source_verification_status") == MACHINE_VERIFIED and window.get("official_publication_kind") == "guarantee":
+        return "machine_verified_guarantee"
+    if window.get("source_verification_status") == MACHINE_VERIFIED:
+        return "machine_verified_estimate"
     if window.get("source_verification_status") == HUMAN_VERIFIED and window.get("official_publication_kind") == "guarantee":
         return "human_verified_guarantee"
     if window.get("source_verification_status") == HUMAN_VERIFIED:
         return "human_verified_estimate"
     return "unverified_citation"
+
+
+def _trusted_lock_conflict(
+    policies: list[dict[str, Any]],
+    hours: dict[str, int],
+    days: dict[str, int],
+    official_overlay: dict[str, Any],
+    pricing_overlay: dict[str, Any],
+) -> str | None:
+    for policy in policies:
+        target_id = policy["target_id"]
+        if policy.get("trusted_publication_locked") and (
+            target_id in hours or target_id in days or target_id in official_overlay
+        ):
+            return (
+                f"{target_id}: a trusted publication record cannot be replaced by caller timing"
+            )
+        if policy.get("trusted_pricing_locked") and target_id in pricing_overlay:
+            return f"{target_id}: a trusted pricing record cannot be replaced by caller pricing evidence"
+    return None
+
+
+def _reported_publication_status(policy: dict[str, Any], verification_status: str, timing_source: str) -> str:
+    if timing_source == "citation":
+        return verification_status
+    if (
+        policy.get("trusted_publication_locked")
+        and policy.get("source_verification_status") == MACHINE_VERIFIED
+        and policy.get("publication_verification_method") == STRUCTURED_DOCUMENT
+    ):
+        return MACHINE_VERIFIED
+    return UNVERIFIED
+
+
+def _research_summary(*, cited: bool, machine_verified: bool) -> str:
+    if machine_verified:
+        return (
+            "No live research was performed by this read. "
+            "A previously stored structured-document verification is reported separately from caller citations. "
+            "Google indexing stays separate."
+        )
+    if cited:
+        return (
+            "No live research was performed and no source page was fetched. "
+            "A stored citation is reported with its verification state. "
+            "A complete citation is not machine verification and is not a checked guarantee. "
+            "Google indexing stays separate."
+        )
+    return (
+        "No live research was performed and no source page was fetched. "
+        "Publication time, approval time, and indexing time remain unknown."
+    )
 
 
 def _registry_window_fields(raw: Any) -> dict[str, Any]:

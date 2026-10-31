@@ -449,7 +449,10 @@ class ToolService:
                     "pricing_status": row["pricing_status"],
                     "pricing_citation_validity": row["pricing_citation_validity"],
                     "pricing_source_verification_status": row["pricing_source_verification_status"],
-                    "pricing_live_verified": False,
+                    "pricing_verification_method": row.get("pricing_verification_method"),
+                    "publication_verification_method": row.get("publication_verification_method"),
+                    "pricing_live_verified": bool(row["pricing_live_verified"]),
+                    "timing_live_verified": bool(row["timing_live_verified"]),
                     "free_submission_available": row["free_submission_available"],
                 }
                 for row in analysis["decisions"]
@@ -460,6 +463,40 @@ class ToolService:
         payload = dict(payload)
         payload["allow_paid"] = False
         return self.publishing.preview_plan(**payload)
+
+    def verify_publication_source(
+        self,
+        platform_id: str,
+        verification_authorization: str | None = None,
+        *,
+        fetcher: Any | None = None,
+    ) -> dict[str, Any]:
+        from event_seo_mcp.publishing.source_verification import verify_publication_source
+
+        return verify_publication_source(
+            self.repo,
+            self.settings,
+            platform_id,
+            verification_authorization,
+            fetcher=fetcher,
+        )
+
+    def verify_pricing_source(
+        self,
+        platform_id: str,
+        verification_authorization: str | None = None,
+        *,
+        fetcher: Any | None = None,
+    ) -> dict[str, Any]:
+        from event_seo_mcp.publishing.source_verification import verify_pricing_source
+
+        return verify_pricing_source(
+            self.repo,
+            self.settings,
+            platform_id,
+            verification_authorization,
+            fetcher=fetcher,
+        )
 
     def submit_event_dry_run(self, event_id: str, platform_id: str) -> dict[str, Any]:
         result = self.submit_event(event_id, platform_id, dry_run=True, authorize_publication=False)

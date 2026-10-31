@@ -46,6 +46,13 @@ class Settings(BaseSettings):
 
     dry_run_default: bool = True
     require_publication_authorization: bool = True
+    # Privileged publication and pricing checks. Off unless an operator turns this on.
+    # Ordinary planning inputs cannot set it, and it does not publish.
+    live_source_verification_enabled: bool = False
+    verification_operator_token: str | None = Field(default=None, repr=False)
+    source_verification_timeout_seconds: float = 5.0
+    source_verification_max_bytes: int = 262144
+    source_verification_max_redirects: int = 3
     max_concurrent_browser_sessions: int = 1
     execution_timeout_seconds: int = 120
     rate_limit_requests_per_minute: int = 30
@@ -98,6 +105,7 @@ class Settings(BaseSettings):
         "skyvern_api_key",
         "eventbrite_api_token",
         "eventbrite_organization_id",
+        "verification_operator_token",
         "google_sheets_spreadsheet_id",
         "google_sheets_credentials_json",
         "google_application_credentials",
