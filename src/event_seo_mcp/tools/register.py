@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from mcp.server import MCPServer
@@ -226,6 +227,153 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
             dry_run=dry_run,
             authorize_publication=authorize_publication,
             event_id=event_id,
+        )
+
+    @mcp.tool()
+    def get_target_publication_policy(platform_id: str | None = None) -> dict[str, Any]:
+        """Return registry publication policy for one target or every configured target.
+
+        Timelines are unknown unless the registry already cites them. Missing evidence stays null.
+        """
+        return service.get_target_publication_policy(platform_id)
+
+    @mcp.tool()
+    def research_target_publication_time(platform_id: str) -> dict[str, Any]:
+        """Separate submission, approval, publication, site search, and indexing clocks for one target."""
+        return service.research_target_publication_time(platform_id)
+
+    @mcp.tool()
+    def refresh_target_research() -> dict[str, Any]:
+        """Reload every registry target into a SQLite research snapshot. Does not invent timelines."""
+        return service.refresh_target_research()
+
+    @mcp.tool()
+    def generate_seo_event_content(
+        event_name: str,
+        event_description: str,
+        event_start_datetime: str,
+        event_timezone: str,
+        landing_page_url: str,
+        registration_url: str,
+        organizer_name: str,
+        target_website: str,
+        event_end_datetime: str | None = None,
+        location: str | None = None,
+        virtual_event_details: str | None = None,
+        target_audience: str | None = None,
+        primary_keyword: str | None = None,
+        secondary_keywords: list[str] | None = None,
+        content_source: str = "template",
+        content_language: str = "en",
+    ) -> dict[str, Any]:
+        """Draft listing copy from supplied facts. seo-agent is rejected until that provider exists."""
+        return service.generate_seo_event_content(
+            event_name=event_name,
+            event_description=event_description,
+            event_start_datetime=event_start_datetime,
+            event_timezone=event_timezone,
+            landing_page_url=landing_page_url,
+            registration_url=registration_url,
+            organizer_name=organizer_name,
+            target_website=target_website,
+            event_end_datetime=event_end_datetime,
+            location=location,
+            virtual_event_details=virtual_event_details,
+            target_audience=target_audience,
+            primary_keyword=primary_keyword,
+            secondary_keywords=secondary_keywords,
+            content_source=content_source,
+            content_language=content_language,
+        )
+
+    @mcp.tool()
+    def analyze_event_publishing_deadlines(
+        event_name: str,
+        event_start_datetime: str,
+        event_timezone: str,
+        submission_datetime: str | None = None,
+        publication_deadline_buffer_hours: int = 24,
+        conservative_fallback_hours: int | None = None,
+        allow_paid: bool = False,
+        virtual_event: bool | None = None,
+        event_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Classify every non-workflow target against the event start. Unknown timelines are not treated as eligible."""
+        return service.analyze_event_publishing_deadlines(
+            event_name=event_name,
+            event_start_datetime=event_start_datetime,
+            event_timezone=event_timezone,
+            submission_datetime=submission_datetime,
+            publication_deadline_buffer_hours=publication_deadline_buffer_hours,
+            conservative_fallback_hours=conservative_fallback_hours,
+            allow_paid=allow_paid,
+            virtual_event=virtual_event,
+            event_id=event_id,
+        )
+
+    @mcp.tool()
+    def recommend_submission_targets(
+        event_name: str,
+        event_start_datetime: str,
+        event_timezone: str,
+        submission_datetime: str | None = None,
+        publication_deadline_buffer_hours: int = 24,
+        conservative_fallback_hours: int | None = None,
+        event_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Return the default free, timely target order. Paid options stay excluded."""
+        return service.recommend_submission_targets(
+            event_name=event_name,
+            event_start_datetime=event_start_datetime,
+            event_timezone=event_timezone,
+            submission_datetime=submission_datetime,
+            publication_deadline_buffer_hours=publication_deadline_buffer_hours,
+            conservative_fallback_hours=conservative_fallback_hours,
+            allow_paid=False,
+            event_id=event_id,
+        )
+
+    @mcp.tool()
+    def preview_submission_plan(
+        event_name: str,
+        event_start_datetime: str,
+        event_timezone: str,
+        submission_datetime: str | None = None,
+        publication_deadline_buffer_hours: int = 24,
+        conservative_fallback_hours: int | None = None,
+        event_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Preview eligible targets. The preview does not publish."""
+        return service.preview_submission_plan(
+            event_name=event_name,
+            event_start_datetime=event_start_datetime,
+            event_timezone=event_timezone,
+            submission_datetime=submission_datetime,
+            publication_deadline_buffer_hours=publication_deadline_buffer_hours,
+            conservative_fallback_hours=conservative_fallback_hours,
+            allow_paid=False,
+            event_id=event_id,
+        )
+
+    @mcp.tool()
+    def submit_event_dry_run(event_id: str, platform_id: str) -> dict[str, Any]:
+        """Run the existing submit path with dry-run forced on and publication authorization forced off."""
+        return service.submit_event_dry_run(event_id, platform_id)
+
+    @mcp.resource(
+        "event-seo://publication-policies",
+        name="publication_policies",
+        description="Read-only registry publication policies. Timelines are unknown unless already cited.",
+        mime_type="application/json",
+    )
+    def publication_policies() -> str:
+        return json.dumps(service.get_target_publication_policy())
+
+    @mcp.prompt(name="check_event_deadlines", description="Ask for an explainable free-site submission plan.")
+    def check_event_deadlines(event_name: str, event_start_datetime: str, event_timezone: str) -> str:
+        return (
+            f"Use analyze_event_publishing_deadlines for {event_name} starting {event_start_datetime} "
+            f"({event_timezone}). Do not treat unknown publication times as eligible, and do not publish."
         )
 
     @mcp.tool()

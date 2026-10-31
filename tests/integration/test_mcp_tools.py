@@ -36,6 +36,14 @@ EXPECTED_TOOLS = {
     "list_submission_targets",
     "submit_event_to_site",
     "record_publication_update",
+    "get_target_publication_policy",
+    "research_target_publication_time",
+    "refresh_target_research",
+    "generate_seo_event_content",
+    "analyze_event_publishing_deadlines",
+    "recommend_submission_targets",
+    "preview_submission_plan",
+    "submit_event_dry_run",
 }
 
 

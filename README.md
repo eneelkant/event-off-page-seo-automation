@@ -76,6 +76,8 @@ There is **no hosted public URL in this repository by default**. Deploy the imag
 
 `submit_event` / `submit_campaign` default to **dry-run**. Live publication requires `authorize_publication=true` and will still block unverified platforms.
 
+Planning tools: `get_target_publication_policy`, `research_target_publication_time`, `refresh_target_research`, `generate_seo_event_content`, `analyze_event_publishing_deadlines`, `recommend_submission_targets`, `preview_submission_plan`, and `submit_event_dry_run`. Unknown publication times stay ineligible. See [Publishing engine](docs/PUBLISHING_ENGINE.md).
+
 Google Sheets tools: `list_submission_targets`, `submit_event_to_site`, `record_publication_update`. They read the credentials tab without returning passwords, track rows on the `Submissions` tab, and default to dry-run. Gemini and other HTTP clients use `/api/submission-targets`, `/api/submissions`, and `/api/publication-updates` with `Authorization: Bearer $MCP_AUTH_TOKEN`. See [Google Sheets and Gemini](docs/GOOGLE_SHEETS.md).
 
 ## Documentation

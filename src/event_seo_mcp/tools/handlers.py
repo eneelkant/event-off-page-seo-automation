@@ -22,6 +22,7 @@ from event_seo_mcp.schemas.event import EventRecord
 from event_seo_mcp.settings import Settings, get_settings
 from event_seo_mcp.tracking.backlinks import BacklinkVerifier
 from event_seo_mcp.integrations.google_sheets.service import SheetsWorkflow
+from event_seo_mcp.publishing.intelligence import PublishingIntelligence
 from event_seo_mcp import __version__
 
 
@@ -34,6 +35,7 @@ class ToolService:
         self.reporter = CampaignReporter(repo)
         self.backlinks = BacklinkVerifier(repo, self.settings)
         self.sheets = SheetsWorkflow(repo, self.settings, self.orchestrator)
+        self.publishing = PublishingIntelligence(repo, self.settings)
         sync_platforms_to_db(repo, self.settings)
 
     def health_check(self) -> dict[str, Any]:
@@ -399,6 +401,45 @@ class ToolService:
             published_date=published_date,
             external_submission_id=external_submission_id,
         )
+
+    def get_target_publication_policy(self, platform_id: str | None = None) -> dict[str, Any]:
+        return self.publishing.publication_policy(platform_id)
+
+    def research_target_publication_time(self, platform_id: str) -> dict[str, Any]:
+        return self.publishing.research_publication_time(platform_id)
+
+    def refresh_target_research(self) -> dict[str, Any]:
+        return self.publishing.refresh_research()
+
+    def generate_seo_event_content(self, **payload: Any) -> dict[str, Any]:
+        return self.publishing.generate_seo_content(**payload)
+
+    def analyze_event_publishing_deadlines(self, **payload: Any) -> dict[str, Any]:
+        return self.publishing.analyze_deadlines(**payload)
+
+    def recommend_submission_targets(self, **payload: Any) -> dict[str, Any]:
+        analysis = self.publishing.analyze_deadlines(**payload)
+        if analysis.get("error"):
+            return analysis
+        return {
+            "recommended_submission_order": analysis["recommended_submission_order"],
+            "eligible": analysis["eligible"],
+            "eligible_with_risk": analysis["eligible_with_risk"],
+            "unknown_timelines": analysis["unknown_timelines"],
+            "manual_review": analysis["manual_review"],
+            "excluded_deadlines": analysis["excluded_deadlines"],
+            "publication_guaranteed": False,
+        }
+
+    def preview_submission_plan(self, **payload: Any) -> dict[str, Any]:
+        return self.publishing.preview_plan(**payload)
+
+    def submit_event_dry_run(self, event_id: str, platform_id: str) -> dict[str, Any]:
+        result = self.submit_event(event_id, platform_id, dry_run=True, authorize_publication=False)
+        if isinstance(result, dict):
+            result["authorize_publication"] = False
+            result["live_publication_requested"] = False
+        return result
 
     def load_example_event_if_needed(self) -> None:
         example = self.settings.repo_root / "data/events/example_event.json"
