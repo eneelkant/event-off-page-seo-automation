@@ -233,14 +233,14 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
     def get_target_publication_policy(platform_id: str | None = None) -> dict[str, Any]:
         """Return registry publication policy for one target or every configured target.
 
-        This reads the local registry and does not fetch the website. A target is free only
-        when a complete official citation says so. paid_submission_possible false is not that citation.
+        This reads the local registry and any stored trusted record. It does not fetch the website.
+        A caller citation does not make a target free. paid_submission_possible false is not proof of a free listing.
         """
         return service.get_target_publication_policy(platform_id)
 
     @mcp.tool()
     def research_target_publication_time(platform_id: str) -> dict[str, Any]:
-        """Read one target's stored citation. Does not fetch the website or claim machine verification.
+        """Read one target's stored citation and any trusted record. This call does not fetch the website.
 
         citation_validity and source_verification_status are separate. A complete citation, including one
         with a verifier name and claim, stays unverified. Google indexing is separate from publication time.
@@ -385,7 +385,7 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
     ) -> dict[str, Any]:
         """Preview the same default plan as recommend_submission_targets. The preview does not publish.
 
-        Unverified citations stay in manual review. Machine verification is not claimed.
+        Unverified citations stay in manual review. This call does not fetch official pages.
         """
         return service.preview_submission_plan(
             event_name=event_name,
@@ -400,6 +400,32 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
             official_publication_windows_by_platform=official_publication_windows_by_platform,
             pricing_evidence_by_platform=pricing_evidence_by_platform,
         )
+
+    @mcp.tool()
+    def verify_publication_source(
+        platform_id: str,
+        verification_authorization: str | None = None,
+    ) -> dict[str, Any]:
+        """Fetch the registered official URL and verify a publication window. Does not publish.
+
+        Disabled unless LIVE_SOURCE_VERIFICATION_ENABLED is set. Requires the server operator token.
+        Caller URLs, timestamps, names, and verification flags are not accepted. HTML is not proof.
+        Only a structured document from the registered host can create a trusted publication record.
+        """
+        return service.verify_publication_source(platform_id, verification_authorization)
+
+    @mcp.tool()
+    def verify_pricing_source(
+        platform_id: str,
+        verification_authorization: str | None = None,
+    ) -> dict[str, Any]:
+        """Fetch the registered official URL and verify submission pricing. Does not publish.
+
+        Disabled unless LIVE_SOURCE_VERIFICATION_ENABLED is set. Requires the server operator token.
+        This check is independent of publication-window verification. A missing paid option is not
+        proof that submission is free. Only an explicit boolean in a structured document is accepted.
+        """
+        return service.verify_pricing_source(platform_id, verification_authorization)
 
     @mcp.tool()
     def submit_event_dry_run(event_id: str, platform_id: str) -> dict[str, Any]:

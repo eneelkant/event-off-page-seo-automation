@@ -43,6 +43,8 @@ EXPECTED_TOOLS = {
     "analyze_event_publishing_deadlines",
     "recommend_submission_targets",
     "preview_submission_plan",
+    "verify_publication_source",
+    "verify_pricing_source",
     "submit_event_dry_run",
 }
 
@@ -70,6 +72,13 @@ async def test_tools_registered(settings: Settings) -> None:
         schema = by_name[name].input_schema
         properties = schema["properties"] if isinstance(schema, dict) else schema.properties
         assert timing_inputs <= set(properties)
+    for name in ("verify_publication_source", "verify_pricing_source"):
+        schema = by_name[name].input_schema
+        properties = schema["properties"] if isinstance(schema, dict) else schema.properties
+        assert set(properties) <= {"platform_id", "verification_authorization"}
+        assert "official_source_url" not in properties
+        assert "human_verified" not in properties
+        assert "pricing_live_verified" not in properties
     content_schema = by_name["generate_seo_event_content"].input_schema
     content_properties = content_schema["properties"] if isinstance(content_schema, dict) else content_schema.properties
     assert "content_source" in content_properties

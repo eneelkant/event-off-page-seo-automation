@@ -124,6 +124,32 @@ CREATE TABLE IF NOT EXISTS target_research_snapshots (
     refreshed_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS trusted_source_verifications (
+    platform_id TEXT NOT NULL,
+    evidence_type TEXT NOT NULL,
+    source_url TEXT NOT NULL,
+    retrieved_at TEXT NOT NULL,
+    outcome TEXT NOT NULL,
+    evidence_summary TEXT NOT NULL,
+    verification_method TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    PRIMARY KEY (platform_id, evidence_type)
+);
+
+CREATE TABLE IF NOT EXISTS verification_audit_log (
+    audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    actor TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    platform_id TEXT,
+    source_url TEXT,
+    retrieved_at TEXT,
+    outcome TEXT NOT NULL,
+    evidence_summary TEXT,
+    verification_method TEXT,
+    detail TEXT
+);
+
 CREATE TABLE IF NOT EXISTS sheet_submission_links (
     event_id TEXT NOT NULL,
     site_key TEXT NOT NULL,
