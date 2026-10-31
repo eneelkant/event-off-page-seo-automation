@@ -3,7 +3,9 @@
 Caller citations and verification flags stay untrusted. A trusted record is
 written only after this module fetches the platform's registered HTTPS
 documentation URL and reads a structured document. HTML, free text, and
-model output are not proof. Live fetching is disabled unless
+model output are not proof. Non-canonical numeric hosts are rejected before
+DNS. A stored row is applied only when it still matches that official host
+and the same structural checks. Live fetching is disabled unless
 LIVE_SOURCE_VERIFICATION_ENABLED is set, and the call must present the
 server-side operator token. Planning tools cannot write these records.
 """
@@ -110,6 +112,8 @@ def inspect_https_url(value: str) -> UrlCheck:
         return UrlCheck(False, "", "", "source host is not allowed")
     if parts.port not in (None, 443):
         return UrlCheck(False, "", "", "source URL must use port 443")
+    if _noncanonical_numeric_host(host):
+        return UrlCheck(False, "", "", "source host is not allowed")
     ip = _literal_ip(host)
     if ip is not None and _disallowed_ip(ip):
         return UrlCheck(False, "", "", "source address is not allowed")
@@ -130,13 +134,41 @@ def _literal_ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | No
     return None
 
 
+def _noncanonical_numeric_host(host: str) -> bool:
+    """Reject abbreviated, octal, and hexadecimal IPv4 forms before DNS.
+
+    Canonical dotted quads are left to ``ipaddress``. Forms such as ``127.1``,
+    ``0177.0.0.1``, and ``0x7f.0.0.1`` are not public DNS names, and some
+    resolvers map them to loopback.
+    """
+    labels = host.split(".")
+    if not 1 <= len(labels) <= 4 or not all(_ipv4_component(label) for label in labels):
+        return False
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return True
+    return False
+
+
+def _ipv4_component(label: str) -> bool:
+    if not label:
+        return False
+    if label.isdigit():
+        return True
+    return len(label) > 2 and label.startswith("0x") and all(character in "0123456789abcdef" for character in label[2:])
+
+
 def _public_hostname(host: str) -> bool:
     labels = host.split(".")
     if len(labels) < 2:
         return False
-    if any(not label or len(label) > 63 or label.startswith("-") or label.endswith("-") for label in labels):
-        return False
-    return all(character.isalnum() or character == "-" for label in labels for character in label)
+    for label in labels:
+        if not label or len(label) > 63 or label.startswith("-") or label.endswith("-"):
+            return False
+        if not all(character.isascii() and (character.isalnum() or character == "-") for character in label):
+            return False
+    return True
 
 
 def _disallowed_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
@@ -424,7 +456,7 @@ def verify_source(
     )
     fetched = active.fetch(source_url)
     if fetched.outcome != "ok":
-        _delete_trusted(repo, platform_id, evidence_type)
+        removed = _delete_trusted(repo, platform_id, evidence_type)
         return _finish(
             repo,
             secret,
@@ -438,17 +470,17 @@ def verify_source(
             method=None,
             detail=fetched.reason,
             live_fetch_attempted=True,
-            prior_removed=True,
+            prior_removed=removed,
             extra={
                 "message": fetched.reason,
                 "manual_review_required": True,
                 "live_source_verification_enabled": True,
-                "prior_trusted_record_removed": True,
+                "prior_trusted_record_removed": removed,
             },
         )
     interpreted = _interpret(fetched, evidence_type, platform_id)
     if interpreted is None:
-        _delete_trusted(repo, platform_id, evidence_type)
+        removed = _delete_trusted(repo, platform_id, evidence_type)
         reason = _interpret_problem(fetched, evidence_type, platform_id)
         return _finish(
             repo,
@@ -463,12 +495,12 @@ def verify_source(
             method="uninterpreted_response",
             detail=reason,
             live_fetch_attempted=True,
-            prior_removed=True,
+            prior_removed=removed,
             extra={
                 "message": reason,
                 "manual_review_required": True,
                 "live_source_verification_enabled": True,
-                "prior_trusted_record_removed": True,
+                "prior_trusted_record_removed": removed,
             },
         )
     _save_trusted(repo, platform_id, evidence_type, fetched, interpreted)
@@ -513,16 +545,22 @@ def load_trusted_record(repo: Repository, platform_id: str, evidence_type: str) 
         return None
     if not isinstance(payload, dict):
         return None
+    summary = _sanitize_summary(row["evidence_summary"])
+    if summary is None or not _stored_payload_ok(evidence_type, payload, row["source_url"], row["retrieved_at"]):
+        return None
     payload["source_url"] = row["source_url"]
     payload["retrieved_at"] = row["retrieved_at"]
-    payload["evidence_summary"] = row["evidence_summary"]
+    payload["evidence_summary"] = summary
     payload["verification_method"] = row["verification_method"]
     return payload
 
 
 def apply_trusted_records(repo: Repository, policy: dict[str, Any]) -> None:
     """Overlay stored trusted records. Caller packets cannot create these rows."""
+    expected = _official_https_url(policy.get("official_guidelines_url"), policy.get("base_url"))
     publication = load_trusted_record(repo, policy["target_id"], PUBLICATION)
+    if publication and not _same_official_host(publication.get("source_url"), expected):
+        publication = None
     if publication:
         policy["official_publication_hours"] = publication.get("hours")
         policy["official_publication_business_days"] = publication.get("business_days")
@@ -546,6 +584,8 @@ def apply_trusted_records(repo: Repository, policy: dict[str, Any]) -> None:
             "machine_verified_guarantee" if publication.get("kind") == "guarantee" else "machine_verified_estimate"
         )
     pricing = load_trusted_record(repo, policy["target_id"], PRICING)
+    if pricing and not _same_official_host(pricing.get("source_url"), expected):
+        pricing = None
     if not pricing:
         return
     free = pricing.get("free_submission_available")
@@ -590,7 +630,9 @@ def _interpret(fetched: FetchResult, evidence_type: str, platform_id: str) -> di
         return None
     assert fetched.body is not None
     document = json.loads(fetched.body.decode("utf-8"))
-    summary = str(document["evidence_summary"]).strip()[:_SUMMARY_MAX]
+    summary = _sanitize_summary(str(document["evidence_summary"]))
+    if summary is None:
+        return None
     if evidence_type == PUBLICATION:
         return {
             "kind": document["kind"],
@@ -628,7 +670,7 @@ def _interpret_problem(fetched: FetchResult, evidence_type: str, platform_id: st
     if document.get("platform_id") != platform_id:
         return "platform_id did not match the requested target"
     summary = document.get("evidence_summary")
-    if not isinstance(summary, str) or not (_SUMMARY_MIN <= len(summary.strip()) <= _SUMMARY_MAX):
+    if not isinstance(summary, str) or _sanitize_summary(summary) is None:
         return "evidence_summary must explain the official statement"
     if evidence_type == PUBLICATION:
         return _publication_problem(document)
@@ -732,11 +774,53 @@ def _save_trusted(
     )
 
 
-def _delete_trusted(repo: Repository, platform_id: str, evidence_type: str) -> None:
-    repo.db.execute(
+def _delete_trusted(repo: Repository, platform_id: str, evidence_type: str) -> bool:
+    cursor = repo.db.execute(
         "DELETE FROM trusted_source_verifications WHERE platform_id = ? AND evidence_type = ?",
         (platform_id, evidence_type),
     )
+    return cursor.rowcount > 0
+
+
+def _sanitize_summary(value: Any) -> str | None:
+    """Drop control characters. The remaining text is not structured proof."""
+    if not isinstance(value, str):
+        return None
+    cleaned = "".join(character if character.isprintable() else " " for character in value)
+    cleaned = " ".join(cleaned.split())
+    if not (_SUMMARY_MIN <= len(cleaned) <= _SUMMARY_MAX):
+        return None
+    return cleaned
+
+
+def _server_timestamp(value: Any) -> bool:
+    if not isinstance(value, str) or not value or len(value) > 40:
+        return False
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return False
+    return parsed.tzinfo is not None and parsed.utcoffset() is not None
+
+
+def _stored_payload_ok(evidence_type: str, payload: dict[str, Any], source_url: Any, retrieved_at: Any) -> bool:
+    if not isinstance(source_url, str) or not inspect_https_url(source_url).ok:
+        return False
+    if not _server_timestamp(retrieved_at):
+        return False
+    if evidence_type == PUBLICATION:
+        return _publication_problem(payload) is None
+    if evidence_type == PRICING:
+        return _pricing_problem(payload) is None
+    return False
+
+
+def _same_official_host(stored: Any, expected: str | None) -> bool:
+    if not isinstance(stored, str) or expected is None:
+        return False
+    left = inspect_https_url(stored)
+    right = inspect_https_url(expected)
+    return left.ok and right.ok and left.host == right.host
 
 
 def _scrub(value: str | None, secret: str | None) -> str | None:
