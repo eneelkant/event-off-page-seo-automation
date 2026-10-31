@@ -71,6 +71,10 @@ See `.cursor/mcp.json.example` → `event-off-page-seo-stdio-local`.
 MCP_TRANSPORT=stdio python -m event_seo_mcp.server
 ```
 
+## Planning tools
+
+`analyze_event_publishing_deadlines`, `recommend_submission_targets`, and `preview_submission_plan` share the same timing arguments. Caller-supplied hours are not official guarantees. A cited official window needs a source URL, verification date, summary, and `kind` of `guarantee` or `estimate`. `research_target_publication_time` reads the local registry and reports `live_research_performed: false`. `generate_seo_event_content` accepts only `content_source=template`. These tools do not publish. See `docs/PUBLISHING_ENGINE.md`.
+
 ## Auth reminder
 
 - Production `/mcp` requires `Authorization: Bearer <MCP_AUTH_TOKEN>`.

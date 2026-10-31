@@ -38,6 +38,10 @@ class ResearchRecord(BaseModel):
     sources: list[ResearchSource] = Field(default_factory=list)
     unknown_fields: list[str] = Field(default_factory=list)
     notes: str | None = None
+    # Optional citations. Invalid or incomplete citations stay unknown; they never
+    # make a target free or give it an official publication window by themselves.
+    pricing: dict[str, Any] | None = None
+    publication_window: dict[str, Any] | None = None
 
 
 class CredentialMetadata(BaseModel):

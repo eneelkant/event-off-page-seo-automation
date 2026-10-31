@@ -54,6 +54,25 @@ async def test_tools_registered(settings: Settings) -> None:
     tools = await mcp.list_tools()
     names = {t.name for t in tools}
     assert EXPECTED_TOOLS.issubset(names)
+    by_name = {tool.name: tool for tool in tools}
+    timing_inputs = {
+        "documented_hours_by_platform",
+        "documented_business_days_by_platform",
+        "official_publication_windows_by_platform",
+        "pricing_evidence_by_platform",
+        "publication_deadline_buffer_hours",
+    }
+    for name in (
+        "analyze_event_publishing_deadlines",
+        "recommend_submission_targets",
+        "preview_submission_plan",
+    ):
+        schema = by_name[name].input_schema
+        properties = schema["properties"] if isinstance(schema, dict) else schema.properties
+        assert timing_inputs <= set(properties)
+    content_schema = by_name["generate_seo_event_content"].input_schema
+    content_properties = content_schema["properties"] if isinstance(content_schema, dict) else content_schema.properties
+    assert "content_source" in content_properties
 
 
 @pytest.mark.asyncio

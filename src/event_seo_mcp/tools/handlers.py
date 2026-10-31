@@ -418,6 +418,8 @@ class ToolService:
         return self.publishing.analyze_deadlines(**payload)
 
     def recommend_submission_targets(self, **payload: Any) -> dict[str, Any]:
+        payload = dict(payload)
+        payload["allow_paid"] = False
         analysis = self.publishing.analyze_deadlines(**payload)
         if analysis.get("error"):
             return analysis
@@ -429,9 +431,25 @@ class ToolService:
             "manual_review": analysis["manual_review"],
             "excluded_deadlines": analysis["excluded_deadlines"],
             "publication_guaranteed": False,
+            "live_research_performed": False,
+            "decisions": [
+                {
+                    "target_id": row["target_id"],
+                    "eligibility_status": row["eligibility_status"],
+                    "eligibility_reason": row["eligibility_reason"],
+                    "timing_source": row["timing_source"],
+                    "timing_kind": row["timing_kind"],
+                    "latest_safe_submission_datetime": row["latest_safe_submission_datetime"],
+                    "pricing_status": row["pricing_status"],
+                    "free_submission_available": row["free_submission_available"],
+                }
+                for row in analysis["decisions"]
+            ],
         }
 
     def preview_submission_plan(self, **payload: Any) -> dict[str, Any]:
+        payload = dict(payload)
+        payload["allow_paid"] = False
         return self.publishing.preview_plan(**payload)
 
     def submit_event_dry_run(self, event_id: str, platform_id: str) -> dict[str, Any]:

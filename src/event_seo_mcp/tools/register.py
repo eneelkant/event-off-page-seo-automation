@@ -233,18 +233,23 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
     def get_target_publication_policy(platform_id: str | None = None) -> dict[str, Any]:
         """Return registry publication policy for one target or every configured target.
 
-        Timelines are unknown unless the registry already cites them. Missing evidence stays null.
+        This reads the local registry and does not fetch the website. A target is free only
+        when a complete official citation says so. paid_submission_possible false is not that citation.
         """
         return service.get_target_publication_policy(platform_id)
 
     @mcp.tool()
     def research_target_publication_time(platform_id: str) -> dict[str, Any]:
-        """Separate submission, approval, publication, site search, and indexing clocks for one target."""
+        """Read one target's registry citation. Does not fetch the website or invent a publication time.
+
+        The result says live_research_performed false. Unknown clocks stay unknown.
+        Google indexing is reported separately from publication time.
+        """
         return service.research_target_publication_time(platform_id)
 
     @mcp.tool()
     def refresh_target_research() -> dict[str, Any]:
-        """Reload every registry target into a SQLite research snapshot. Does not invent timelines."""
+        """Store a registry snapshot for every target. This is not live website research."""
         return service.refresh_target_research()
 
     @mcp.tool()
@@ -266,7 +271,11 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
         content_source: str = "template",
         content_language: str = "en",
     ) -> dict[str, Any]:
-        """Draft listing copy from supplied facts. seo-agent is rejected until that provider exists."""
+        """Draft listing copy from supplied facts. The only supported content_source is template.
+
+        seo-agent stays disconnected. Other content_source values are rejected and are not relabeled as template.
+        The official event name is kept in full even when it exceeds the title limit.
+        """
         return service.generate_seo_event_content(
             event_name=event_name,
             event_description=event_description,
@@ -297,8 +306,19 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
         allow_paid: bool = False,
         virtual_event: bool | None = None,
         event_id: str | None = None,
+        documented_hours_by_platform: dict[str, int] | None = None,
+        documented_business_days_by_platform: dict[str, int] | None = None,
+        official_publication_windows_by_platform: dict[str, Any] | None = None,
+        pricing_evidence_by_platform: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Classify every non-workflow target against the event start. Unknown timelines are not treated as eligible."""
+        """Classify every non-workflow target against the timezone-aware event start.
+
+        documented_hours_by_platform and documented_business_days_by_platform are caller-supplied.
+        official_publication_windows_by_platform requires a source URL, verification date, summary,
+        kind of guarantee or estimate, and exactly one of hours or business_days.
+        Unknown timelines and unverified pricing stay out of the default recommendation.
+        Negative, malformed, or unreasonable timing values are rejected.
+        """
         return service.analyze_event_publishing_deadlines(
             event_name=event_name,
             event_start_datetime=event_start_datetime,
@@ -309,6 +329,10 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
             allow_paid=allow_paid,
             virtual_event=virtual_event,
             event_id=event_id,
+            documented_hours_by_platform=documented_hours_by_platform,
+            documented_business_days_by_platform=documented_business_days_by_platform,
+            official_publication_windows_by_platform=official_publication_windows_by_platform,
+            pricing_evidence_by_platform=pricing_evidence_by_platform,
         )
 
     @mcp.tool()
@@ -320,8 +344,15 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
         publication_deadline_buffer_hours: int = 24,
         conservative_fallback_hours: int | None = None,
         event_id: str | None = None,
+        documented_hours_by_platform: dict[str, int] | None = None,
+        documented_business_days_by_platform: dict[str, int] | None = None,
+        official_publication_windows_by_platform: dict[str, Any] | None = None,
+        pricing_evidence_by_platform: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Return the default free, timely target order. Paid options stay excluded."""
+        """Return the default plan. Unknown pricing and unknown timelines stay excluded.
+
+        Timing arguments match analyze_event_publishing_deadlines. Paid options stay excluded.
+        """
         return service.recommend_submission_targets(
             event_name=event_name,
             event_start_datetime=event_start_datetime,
@@ -329,8 +360,11 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
             submission_datetime=submission_datetime,
             publication_deadline_buffer_hours=publication_deadline_buffer_hours,
             conservative_fallback_hours=conservative_fallback_hours,
-            allow_paid=False,
             event_id=event_id,
+            documented_hours_by_platform=documented_hours_by_platform,
+            documented_business_days_by_platform=documented_business_days_by_platform,
+            official_publication_windows_by_platform=official_publication_windows_by_platform,
+            pricing_evidence_by_platform=pricing_evidence_by_platform,
         )
 
     @mcp.tool()
@@ -342,8 +376,12 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
         publication_deadline_buffer_hours: int = 24,
         conservative_fallback_hours: int | None = None,
         event_id: str | None = None,
+        documented_hours_by_platform: dict[str, int] | None = None,
+        documented_business_days_by_platform: dict[str, int] | None = None,
+        official_publication_windows_by_platform: dict[str, Any] | None = None,
+        pricing_evidence_by_platform: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Preview eligible targets. The preview does not publish."""
+        """Preview the same default plan as recommend_submission_targets. The preview does not publish."""
         return service.preview_submission_plan(
             event_name=event_name,
             event_start_datetime=event_start_datetime,
@@ -351,8 +389,11 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
             submission_datetime=submission_datetime,
             publication_deadline_buffer_hours=publication_deadline_buffer_hours,
             conservative_fallback_hours=conservative_fallback_hours,
-            allow_paid=False,
             event_id=event_id,
+            documented_hours_by_platform=documented_hours_by_platform,
+            documented_business_days_by_platform=documented_business_days_by_platform,
+            official_publication_windows_by_platform=official_publication_windows_by_platform,
+            pricing_evidence_by_platform=pricing_evidence_by_platform,
         )
 
     @mcp.tool()
