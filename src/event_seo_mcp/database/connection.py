@@ -204,6 +204,25 @@ class Database:
                 conn.executemany(sql, seq)
                 conn.commit()
 
+    def execute_transaction(self, statements: list[tuple[str, tuple | list]]) -> list[int]:
+        """Commit every statement, or roll all of them back."""
+        if not statements:
+            raise ValueError("a transaction needs at least one statement")
+        with self._lock:
+            conn = self.connect()
+            try:
+                counts: list[int] = []
+                for sql, params in statements:
+                    cursor = conn.execute(sql, params)
+                    counts.append(cursor.rowcount)
+                conn.commit()
+                return counts
+            except Exception:
+                conn.rollback()
+                raise
+            finally:
+                conn.close()
+
     def fetchone(self, sql: str, params: tuple | list = ()) -> sqlite3.Row | None:
         with self._lock:
             with self.connect() as conn:

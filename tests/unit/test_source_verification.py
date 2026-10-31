@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import sqlite3
+import time
 
 import pytest
 
@@ -101,6 +103,26 @@ def _trusted_count(service: ToolService) -> int:
     return service.repo.db.fetchone("SELECT COUNT(*) AS n FROM trusted_source_verifications")["n"]
 
 
+def _audit_count(service: ToolService) -> int:
+    return service.repo.db.fetchone("SELECT COUNT(*) AS n FROM verification_audit_log")["n"]
+
+
+def _break_audit_statement(service: ToolService) -> None:
+    """Keep the real transaction, and make its audit statement fail."""
+    real = service.repo.db.execute_transaction
+
+    def flaky(statements):
+        rewritten = []
+        for sql, params in statements:
+            if isinstance(sql, str) and "INTO verification_audit_log" in sql:
+                rewritten.append(("INSERT INTO missing_table (id) VALUES (1)", ()))
+            else:
+                rewritten.append((sql, params))
+        return real(rewritten)
+
+    service.repo.db.execute_transaction = flaky
+
+
 @pytest.mark.parametrize(
     "url",
     [
@@ -160,6 +182,104 @@ def test_redirect_to_metadata_or_private_addresses_is_not_followed() -> None:
     assert result.outcome == "blocked"
     assert "official host" in result.reason
     assert calls == [OFFICIAL]
+
+
+def test_dns_lookup_timeout_does_not_connect() -> None:
+    def resolver(_host: str):
+        time.sleep(0.3)
+        return [PUBLIC_IP]
+
+    def opener(_url: str, _timeout: float):
+        raise AssertionError("a timed out lookup must not connect")
+
+    result = SourceFetcher(resolver=resolver, opener=opener, timeout=0.05).fetch(OFFICIAL)
+    assert result.outcome == "unavailable"
+    assert result.reason == "the source host lookup timed out"
+    assert result.body is None
+
+
+def test_non_positive_dns_timeout_does_not_resolve() -> None:
+    def resolver(_host: str):
+        raise AssertionError("lookup must not start")
+
+    result = SourceFetcher(resolver=resolver, timeout=0).fetch(OFFICIAL)
+    assert result.outcome == "unavailable"
+    assert result.reason == "the source host lookup timed out"
+
+
+def test_resolver_errors_and_empty_answers_do_not_connect() -> None:
+    def opener(_url: str, _timeout: float):
+        raise AssertionError("an unusable lookup must not connect")
+
+    def fail(_host: str):
+        raise OSError("servfail")
+
+    failed = SourceFetcher(resolver=fail, opener=opener).fetch(OFFICIAL)
+    assert failed.outcome == "unavailable"
+    assert "could not be resolved" in failed.reason
+
+    def blow_up(_host: str):
+        raise RuntimeError("resolver crashed")
+
+    crashed = SourceFetcher(resolver=blow_up, opener=opener).fetch(OFFICIAL)
+    assert crashed.outcome == "unavailable"
+    assert "could not be resolved" in crashed.reason
+
+    empty = SourceFetcher(resolver=lambda _host: [], opener=opener).fetch(OFFICIAL)
+    assert empty.outcome == "blocked"
+
+    unexpected = SourceFetcher(resolver=lambda _host: "93.184.216.34", opener=opener).fetch(OFFICIAL)  # type: ignore[arg-type]
+    assert unexpected.outcome == "unavailable"
+
+
+def test_mixed_dns_answers_do_not_connect() -> None:
+    unsafe = [
+        "127.0.0.1",
+        "10.1.2.3",
+        "169.254.169.254",
+        "224.0.0.1",
+        "::1",
+        "100.100.100.200",
+        "192.0.0.192",
+    ]
+    for address in unsafe:
+        def opener(_url: str, _timeout: float, address: str = address) -> tuple[int, dict[str, str], bytes]:
+            raise AssertionError(address)
+
+        result = SourceFetcher(
+            resolver=lambda _host, address=address: [PUBLIC_IP, ipaddress.ip_address(address)],
+            opener=opener,
+        ).fetch(OFFICIAL)
+        assert result.outcome == "blocked", address
+        assert result.body is None
+
+
+def test_connection_uses_the_validated_address_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, tuple] = {}
+    lookups = {"n": 0}
+
+    def fake_create_connection(address, timeout=None, *args, **kwargs):
+        seen["address"] = address
+        raise TimeoutError("stop before tls")
+
+    monkeypatch.setattr(
+        "event_seo_mcp.publishing.source_verification.socket.create_connection",
+        fake_create_connection,
+    )
+
+    def resolver(_host: str):
+        lookups["n"] += 1
+        if lookups["n"] > 1:
+            return [ipaddress.ip_address("127.0.0.1")]
+        return [PUBLIC_IP]
+
+    fetcher = SourceFetcher(resolver=resolver, timeout=1)
+    result = fetcher.fetch(OFFICIAL)
+    assert result.outcome == "unavailable"
+    assert result.reason == "the source request timed out"
+    assert seen["address"] == (str(PUBLIC_IP), 443)
+    assert lookups["n"] == 1
+    assert fetcher.pinned_ips == [str(PUBLIC_IP)]
 
 
 def test_private_dns_answer_never_connects() -> None:
@@ -726,3 +846,52 @@ def test_summary_prose_cannot_change_a_structured_result(service: ToolService) -
     assert policy["pricing_status"] == "trusted_free"
     assert policy["free_submission_available"] is True
     assert "\n" not in policy["pricing_reason"]
+
+
+def test_transaction_rolls_back_when_a_later_statement_fails(service: ToolService) -> None:
+    before = _audit_count(service)
+    with pytest.raises(sqlite3.OperationalError):
+        service.repo.db.execute_transaction(
+            [
+                (
+                    """
+                    INSERT INTO verification_audit_log (
+                        created_at, actor, operation, platform_id, source_url, retrieved_at,
+                        outcome, evidence_summary, verification_method, detail
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("t", "actor", "publication_window", "eventbrite", None, None, "verified", None, None, "partial"),
+                ),
+                ("INSERT INTO missing_table (id) VALUES (1)", ()),
+            ]
+        )
+    assert _audit_count(service) == before
+    assert _trusted_count(service) == 0
+
+
+def test_failed_audit_does_not_leave_a_trusted_row(service: ToolService) -> None:
+    _arm(service)
+    _break_audit_statement(service)
+    with pytest.raises(sqlite3.OperationalError):
+        service.verify_publication_source("eventbrite", TOKEN, fetcher=Scripted(_body(_publication())))
+    assert _trusted_count(service) == 0
+    assert _audit_count(service) == 0
+
+
+def test_failed_audit_does_not_drop_an_existing_trusted_row(service: ToolService) -> None:
+    _arm(service)
+    saved = service.verify_publication_source("eventbrite", TOKEN, fetcher=Scripted(_body(_publication())))
+    assert saved["outcome"] == "verified"
+    trusted_before = _trusted_count(service)
+    audits_before = _audit_count(service)
+    assert trusted_before == 1
+    assert audits_before >= 1
+    _break_audit_statement(service)
+    with pytest.raises(sqlite3.OperationalError):
+        service.verify_publication_source(
+            "eventbrite",
+            TOKEN,
+            fetcher=Scripted(FetchResult("unavailable", "the source request timed out", retrieved_at="2026-10-31T13:00:00+00:00")),
+        )
+    assert _trusted_count(service) == trusted_before
+    assert _audit_count(service) == audits_before
