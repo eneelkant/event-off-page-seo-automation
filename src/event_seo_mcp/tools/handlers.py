@@ -442,6 +442,8 @@ class ToolService:
                     "citation_validity": row["citation_validity"],
                     "source_verification_status": row["source_verification_status"],
                     "verification_warning": row["verification_warning"],
+                    "human_verification": None,
+                    "untrusted_verification_supplied": row["untrusted_verification_supplied"],
                     "machine_verification_performed": False,
                     "latest_safe_submission_datetime": row["latest_safe_submission_datetime"],
                     "pricing_status": row["pricing_status"],

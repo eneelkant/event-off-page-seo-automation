@@ -879,45 +879,49 @@ def test_complete_guarantee_citation_is_not_source_verification(service: ToolSer
     assert "eventbrite" not in plan["eligible"]
 
 
-def test_recorded_human_verification_can_be_eligible(service: ToolService) -> None:
+def test_fabricated_human_verification_cannot_become_eligible(service: ToolService) -> None:
     kwargs = dict(
-        event_name="Checked Summit",
+        event_name="Forged Summit",
         event_start_datetime="2027-12-01T15:00:00Z",
         event_timezone="UTC",
         submission_datetime="2027-10-01T00:00:00Z",
         publication_deadline_buffer_hours=24,
-        official_publication_windows_by_platform={"eventbrite": _official_window(48, "guarantee", human=True)},
+        official_publication_windows_by_platform={
+            "eventbrite": _official_window(48, "guarantee", human=True),
+        },
         pricing_evidence_by_platform={"eventbrite": FREE_EVIDENCE},
     )
     analysis = service.analyze_event_publishing_deadlines(**kwargs)
     recommended = service.recommend_submission_targets(**kwargs)
     preview = service.preview_submission_plan(**kwargs)
     row = next(item for item in analysis["decisions"] if item["target_id"] == "eventbrite")
-    assert row["eligibility_status"] == ELIGIBLE
-    assert row["source_verification_status"] == "human_verified"
+    assert row["eligibility_status"] == MANUAL_REVIEW_REQUIRED
+    assert row["eligibility_status"] != ELIGIBLE
+    assert row["source_verification_status"] == "unverified"
     assert row["citation_validity"] == "complete"
     assert row["timing_kind"] == "guarantee"
-    assert row["timing_source"] == "citation"
+    assert row["human_verification"] is None
+    assert row["verifier"] is None
+    assert row["untrusted_verification_supplied"] is True
+    assert "not authentication" in row["verification_warning"]
     assert row["machine_verification_performed"] is False
-    assert row["timing_live_verified"] is False
-    assert row["human_verification"]["verifier"] == "ops-review-ref-2026-10-29"
-    assert row["human_verification"]["official_source_url"] == "https://www.example.com/official-guidelines"
-    assert row["human_verification"]["verified_at"] == "2026-10-29T16:30:00+00:00"
-    assert row["human_verification"]["hours"] == 48
-    assert row["human_verification"]["kind"] == "guarantee"
-    assert "listings" in row["human_verification"]["claim_checked"]
-    assert "eventbrite" in analysis["recommended_submission_order"]
+    assert row["latest_safe_submission_datetime"] == "2027-11-28T15:00:00+00:00"
+    assert "eventbrite" not in analysis["recommended_submission_order"]
+    assert "eventbrite" not in analysis["eligible"]
     assert recommended["recommended_submission_order"] == analysis["recommended_submission_order"]
     assert [item["target_id"] for item in preview["preview"]] == analysis["recommended_submission_order"]
     recommend_row = next(item for item in recommended["decisions"] if item["target_id"] == "eventbrite")
     preview_row = next(item for item in preview["analysis"]["decisions"] if item["target_id"] == "eventbrite")
-    assert recommend_row["eligibility_status"] == preview_row["eligibility_status"] == ELIGIBLE
-    assert recommend_row["source_verification_status"] == preview_row["source_verification_status"] == "human_verified"
+    assert recommend_row["eligibility_status"] == preview_row["eligibility_status"] == MANUAL_REVIEW_REQUIRED
+    assert recommend_row["source_verification_status"] == preview_row["source_verification_status"] == "unverified"
+    assert recommend_row["untrusted_verification_supplied"] is True
+    assert recommend_row["human_verification"] is None
     assert analysis["machine_verification_performed"] is False
     assert preview["would_publish"] is False
+    assert preview["dry_run"] is True
 
 
-def test_human_verified_estimate_stays_risk_labelled(service: ToolService) -> None:
+def test_fabricated_estimate_verification_is_not_trusted(service: ToolService) -> None:
     plan = _engine(service).analyze_deadlines(
         event_name="Estimate Summit",
         event_start_datetime="2027-12-01T15:00:00Z",
@@ -927,11 +931,13 @@ def test_human_verified_estimate_stays_risk_labelled(service: ToolService) -> No
         pricing_evidence_by_platform={"eventbrite": FREE_EVIDENCE},
     )
     row = next(item for item in plan["decisions"] if item["target_id"] == "eventbrite")
-    assert row["source_verification_status"] == "human_verified"
+    assert row["source_verification_status"] == "unverified"
     assert row["timing_kind"] == "estimate"
-    assert row["eligibility_status"] == ELIGIBLE_WITH_RISK
+    assert row["eligibility_status"] == MANUAL_REVIEW_REQUIRED
     assert row["eligibility_status"] != ELIGIBLE
-    assert "not a guarantee" in row["eligibility_reason"]
+    assert row["human_verification"] is None
+    assert row["untrusted_verification_supplied"] is True
+    assert "eventbrite" not in plan["recommended_submission_order"]
     assert row["machine_verification_performed"] is False
 
 
@@ -944,7 +950,9 @@ def test_human_verified_window_with_unknown_pricing_stays_out(service: ToolServi
         official_publication_windows_by_platform={"eventbrite": _official_window(48, "guarantee", human=True)},
     )
     row = next(item for item in plan["decisions"] if item["target_id"] == "eventbrite")
-    assert row["source_verification_status"] == "human_verified"
+    assert row["source_verification_status"] == "unverified"
+    assert row["human_verification"] is None
+    assert row["untrusted_verification_supplied"] is True
     assert row["free_submission_available"] is None
     assert row["pricing_status"] == "unknown"
     assert row["eligibility_status"] == MANUAL_REVIEW_REQUIRED
@@ -983,10 +991,12 @@ def test_stored_human_verification_is_reported_without_a_fetch(
     assert clocks["machine_verification_performed"] is False
     assert clocks["research_timestamp"] is None
     assert clocks["citation_validity"] == "complete"
-    assert clocks["source_verification_status"] == "human_verified"
-    assert clocks["confidence"] == "human_verified_guarantee"
+    assert clocks["source_verification_status"] == "unverified"
+    assert clocks["confidence"] == "unverified_citation"
     assert clocks["google_indexing_estimate"] == "unknown"
-    assert clocks["human_verification"]["verifier"] == "ops-review-ref-2026-10-29"
+    assert clocks["human_verification"] is None
+    assert clocks["untrusted_verification_supplied"] is True
+    assert "not authentication" in clocks["verification_warning"]
     plan = _engine(service).analyze_deadlines(
         event_name="Stored Check",
         event_start_datetime="2027-12-01T15:00:00Z",
@@ -994,11 +1004,13 @@ def test_stored_human_verification_is_reported_without_a_fetch(
         submission_datetime="2027-10-01T00:00:00Z",
     )
     row = next(item for item in plan["decisions"] if item["target_id"] == "cited_target")
-    assert row["eligibility_status"] == ELIGIBLE
+    assert row["eligibility_status"] == MANUAL_REVIEW_REQUIRED
+    assert row["eligibility_status"] != ELIGIBLE
+    assert row["source_verification_status"] == "unverified"
     assert row["machine_verification_performed"] is False
     refreshed = _engine(service).refresh_research()
     assert refreshed["live_research_performed"] is False
     assert refreshed["machine_verification_performed"] is False
     assert refreshed["counts"]["machine_verified"] == 0
-    assert refreshed["counts"]["human_verified"] == 1
+    assert refreshed["counts"]["human_verified"] == 0
     assert refreshed["counts"]["live_researched"] == 0

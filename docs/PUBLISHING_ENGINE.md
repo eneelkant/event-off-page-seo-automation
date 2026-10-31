@@ -15,7 +15,7 @@ A stored citation can be reported when a registry row, or a caller packet, inclu
 - a written reason or summary
 - an explicit free/paid statement, or a publication window with `kind` of `guarantee` or `estimate`
 
-That shape sets `citation_validity` to `complete`. It does not check the page. `source_verification_status` stays `unverified` until a separate human verification record is stored. `kind: "guarantee"` does not by itself make the window a checked guarantee. Incomplete citations stay `unknown`. `research_timestamp` stays null because no live research ran. `machine_verification_performed` is false.
+That shape sets `citation_validity` to `complete`. It does not check the page. `source_verification_status` stays `unverified`. `kind: "guarantee"` does not make the window a checked guarantee. A nested `human_verification` object, including a verifier name, timestamp, URL, and written claim, is not authentication. This server has no trusted verification workflow, so that object cannot set `human_verified` and cannot make a target `ELIGIBLE`. Incomplete citations stay `unknown`. `research_timestamp` stays null because no live research ran. `machine_verification_performed` is false.
 
 `refresh_target_research` writes those registry snapshots to SQLite at `DATABASE_PATH`. The count `live_researched` stays 0. Fly.io has no volume in `fly.toml`, so a machine restart can drop that file. Google Sheets remains the reporting workbook, not the transactional store.
 
@@ -40,23 +40,17 @@ These fields are separate:
 | Field | Meaning |
 | --- | --- |
 | `citation_validity` | `complete` when the URL, date, summary, and window are structurally present. `absent` when no citation was supplied. `invalid` when a stored citation could not be read. |
-| `source_verification_status` | `unverified` when nobody has checked the source page. `human_verified` when an audit record is stored. `machine_verified` is reserved for a fetch-and-check process that this server does not run. |
+| `source_verification_status` | `unverified` for every citation this server can read today. `human_verified` would require a trusted workflow that authenticates the verifier. That workflow is not configured, and a caller-supplied name is not it. `machine_verified` is reserved for a fetch-and-check process that this server does not run. |
 | `timing_kind` | `guarantee` or `estimate` as written on the citation, or `caller_supplied` / `heuristic` when there is no citation. |
 | `eligibility_status` | The planning result. It is not a synonym for any of the fields above. |
 
 `unverified` means the source has not been checked. A caller boolean such as `human_verified: true` or `source_verification_status: "machine_verified"` is rejected. It is not proof.
 
-`human_verified` requires a `human_verification` object with:
-
-- the same official source URL as the citation
-- an ISO-8601 verification datetime that includes a time
-- a verifier identifier or approved reference
-- the specific claim that was checked
-- the same hours or business days, and the same `kind`, as the citation
-
-The server stores that record. It does not look the verifier up in an account directory, and it does not invent a verifier for existing rows. No current registry row is human-verified.
+`human_verified` is not produced by this server. Supplying `human_verification` does not create a trusted record. The fields in that object are checked only so a mismatched or boolean forgery is rejected. A structurally complete forgery stays `unverified`, `human_verification` in the result is null, and the warning says the name and claim were not authenticated.
 
 `machine_verified` would mean this process fetched the page and confirmed the claim. That process is not implemented. Every planning and research response sets `machine_verification_performed` and `live_research_performed` to false.
+
+A target can become `ELIGIBLE` only after a trusted verification workflow exists and records a checked guarantee. No such workflow is configured, so publication citations do not become `ELIGIBLE`.
 
 ## Publication windows
 
@@ -72,15 +66,14 @@ The same arguments are accepted by:
 
 | Input | Verification | Result when the deadline fits and pricing is verified free |
 | --- | --- | --- |
-| Complete citation with `kind: "guarantee"` and no human verification | `unverified` | `MANUAL_REVIEW_REQUIRED`. The calculated window stays visible, with a warning. It is not `ELIGIBLE`. |
-| Complete citation with `kind: "estimate"` and no human verification | `unverified` | `MANUAL_REVIEW_REQUIRED`. |
-| `human_verification` of a guarantee | `human_verified` | `ELIGIBLE`. |
-| `human_verification` of an estimate | `human_verified` | `ELIGIBLE_WITH_RISK`. |
+| Complete citation with `kind: "guarantee"` | `unverified` | `MANUAL_REVIEW_REQUIRED`. The calculated window stays visible, with a warning. It is not `ELIGIBLE`. |
+| Complete citation with `kind: "estimate"` | `unverified` | `MANUAL_REVIEW_REQUIRED`. |
+| Same citation plus a `human_verification` name, timestamp, and claim | `unverified` | `MANUAL_REVIEW_REQUIRED`. The supplied record is not authenticated. |
 | `documented_hours_by_platform` or `documented_business_days_by_platform` | not a citation | `ELIGIBLE_WITH_RISK`. |
 | `conservative_fallback_hours` | heuristic | `ELIGIBLE_WITH_RISK`. |
 | none of the above | unknown timeline | `PUBLICATION_TIME_UNKNOWN`, excluded from the default plan. |
 
-Unknown pricing stays `MANUAL_REVIEW_REQUIRED` and out of `recommended_submission_order`, even when the publication window is human-verified. Negative numbers, booleans, strings, values above 366 days, conflicting windows, and invalid verification metadata are `validation_error` on all three tools. Business-day windows skip weekends. An event start that is not after the planning time is `EVENT_PAST`.
+Unknown pricing stays `MANUAL_REVIEW_REQUIRED` and out of `recommended_submission_order`. A supplied verification record does not change that. Negative numbers, booleans, strings, values above 366 days, conflicting windows, and invalid verification metadata are `validation_error` on all three tools. Business-day windows skip weekends. An event start that is not after the planning time is `EVENT_PAST`.
 
 `recommend_submission_targets` and `preview_submission_plan` use those same states. The preview sets `would_publish` to false.
 
@@ -107,9 +100,9 @@ Read-only planning:
 ## Still required before production
 
 - Live publication remains off by default. Do not send `authorize_publication: true` while testing.
-- No target in the current registry has a human-verified publication window, so a structurally complete citation still needs manual review.
+- No trusted verification workflow is configured, so no publication citation becomes `ELIGIBLE`.
 - Official pages are not fetched. `machine_verified` stays unused until a reviewed extractor confirms the claim and otherwise returns `unknown`.
-- Human verification records a verifier identifier. It does not authenticate that person.
+- A future trusted workflow has to authenticate the verifier. Storing a name in the registry or in a tool argument is not that workflow.
 - `seo-agent` is not configured.
 - SQLite on Fly.io is ephemeral until a volume is approved. This change does not add one.
 - Client UIs in the matrix below were not retested as part of this change.

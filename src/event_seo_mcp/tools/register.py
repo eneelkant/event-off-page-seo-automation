@@ -242,8 +242,8 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
     def research_target_publication_time(platform_id: str) -> dict[str, Any]:
         """Read one target's stored citation. Does not fetch the website or claim machine verification.
 
-        citation_validity and source_verification_status are separate. A complete citation stays unverified
-        until a human_verification record is stored. Google indexing is separate from publication time.
+        citation_validity and source_verification_status are separate. A complete citation, including one
+        with a verifier name and claim, stays unverified. Google indexing is separate from publication time.
         """
         return service.research_target_publication_time(platform_id)
 
@@ -314,7 +314,8 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
         """Classify every non-workflow target against the timezone-aware event start.
 
         A complete citation is not source verification. kind guarantee does not make a target ELIGIBLE.
-        ELIGIBLE requires human_verification of a guarantee plus verified free pricing and a deadline that fits.
+        A human_verification name, timestamp, and claim are not authentication. No trusted verification
+        workflow is configured, so those citations stay unverified and require manual review.
         Estimates, caller-supplied windows, and heuristics stay risk-labelled. Machine verification is not performed.
         Unknown timelines and unknown pricing stay out of the default recommendation.
         """
@@ -350,8 +351,8 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
     ) -> dict[str, Any]:
         """Return the default plan. Unknown pricing, unknown timelines, and unverified citations stay excluded.
 
-        Timing arguments match analyze_event_publishing_deadlines. A guarantee citation is ELIGIBLE only
-        after recorded human verification. Paid options stay excluded.
+        Timing arguments match analyze_event_publishing_deadlines. Caller-supplied verification metadata
+        cannot make a target ELIGIBLE. Paid options stay excluded.
         """
         return service.recommend_submission_targets(
             event_name=event_name,

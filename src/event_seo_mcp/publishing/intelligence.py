@@ -2,8 +2,10 @@
 
 This module reads config/platforms.json. It does not fetch official websites,
 does not invent publication times, and does not connect to an seo-agent API.
-A complete citation is not source verification. ELIGIBLE requires a recorded
-human verification of a guarantee. Machine verification is not implemented.
+A complete citation is not source verification. A verifier name, timestamp,
+and claim are not authentication. No trusted verification workflow is
+configured, so caller-supplied and registry-stored verification records stay
+unverified. Machine verification is not implemented.
 """
 
 from __future__ import annotations
@@ -93,6 +95,7 @@ _EMPTY_WINDOW = {
     "verifier": None,
     "claim_checked": None,
     "verification_verified_at": None,
+    "untrusted_verification_supplied": False,
 }
 
 
@@ -176,7 +179,8 @@ class PublishingIntelligence:
             "source_verification_status": verification_status,
             "machine_verification_performed": False,
             "verification_warning": target.get("verification_warning"),
-            "human_verification": target.get("human_verification"),
+            "human_verification": None,
+            "untrusted_verification_supplied": bool(target.get("untrusted_verification_supplied")),
             "internal_search_visibility": "unknown",
             "search_engine_indexing_time": "unknown",
             "google_indexing_estimate": "unknown",
@@ -787,7 +791,10 @@ def _decision_row(
         "citation_validity": policy.get("citation_validity") or "absent",
         "source_verification_status": verification_status if timing_source == "citation" else UNVERIFIED,
         "verification_warning": warning,
-        "human_verification": policy.get("human_verification") if timing_source == "citation" else None,
+        "human_verification": None,
+        "verifier": None,
+        "claim_checked": None,
+        "untrusted_verification_supplied": bool(policy.get("untrusted_verification_supplied")),
         "machine_verification_performed": False,
         "conservative_publication_hours": hours,
         "latest_safe_submission_datetime": latest.isoformat() if latest else None,
@@ -1060,36 +1067,25 @@ def _unverified_verification() -> dict[str, Any]:
         "verifier": None,
         "claim_checked": None,
         "verification_verified_at": None,
+        "untrusted_verification_supplied": False,
     }
 
 
 def _verification_record(item: dict[str, Any]) -> dict[str, Any]:
-    human = item.get("human_verification")
-    if not human:
-        return _unverified_verification()
-    checked_at = _parse_zoned(str(human.get("verified_at") or ""), "UTC")
-    assert checked_at is not None
-    record = {
-        "official_source_url": _http_url(human.get("official_source_url")),
-        "verified_at": checked_at.isoformat(),
-        "verifier": str(human.get("verifier")).strip(),
-        "claim_checked": str(human.get("claim_checked")).strip(),
-        "hours": human.get("hours"),
-        "business_days": human.get("business_days"),
-        "kind": human.get("kind"),
-    }
-    verified = _unverified_verification()
-    verified.update(
-        {
-            "source_verification_status": HUMAN_VERIFIED,
-            "verification_warning": None,
-            "human_verification": record,
-            "verifier": record["verifier"],
-            "claim_checked": record["claim_checked"],
-            "verification_verified_at": record["verified_at"],
-        }
-    )
-    return verified
+    """Keep every caller or registry citation unverified.
+
+    No authenticated verifier directory, signed approval, or other trusted
+    workflow exists. A nested human_verification object is not that workflow.
+    """
+    record = _unverified_verification()
+    if item.get("human_verification"):
+        record["untrusted_verification_supplied"] = True
+        record["verification_warning"] = (
+            "A human_verification object was supplied, but this server has no trusted "
+            "verification workflow. A verifier name, timestamp, URL, and written claim "
+            "are not authentication, so the citation remains unverified."
+        )
+    return record
 
 
 def _official_window_problem(item: Any) -> str | None:
@@ -1129,7 +1125,7 @@ def _verification_metadata_problem(item: dict[str, Any]) -> str | None:
         if key in item:
             return (
                 f"{key} cannot be supplied as proof of verification. "
-                "Record a human_verification object, or leave the citation unverified."
+                "This server does not accept a caller flag or a verifier name as authentication."
             )
     human = item.get("human_verification")
     if human is None:
