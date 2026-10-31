@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from mcp.server import MCPServer
@@ -226,6 +227,199 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
             dry_run=dry_run,
             authorize_publication=authorize_publication,
             event_id=event_id,
+        )
+
+    @mcp.tool()
+    def get_target_publication_policy(platform_id: str | None = None) -> dict[str, Any]:
+        """Return registry publication policy for one target or every configured target.
+
+        This reads the local registry and does not fetch the website. A target is free only
+        when a complete official citation says so. paid_submission_possible false is not that citation.
+        """
+        return service.get_target_publication_policy(platform_id)
+
+    @mcp.tool()
+    def research_target_publication_time(platform_id: str) -> dict[str, Any]:
+        """Read one target's stored citation. Does not fetch the website or claim machine verification.
+
+        citation_validity and source_verification_status are separate. A complete citation, including one
+        with a verifier name and claim, stays unverified. Google indexing is separate from publication time.
+        """
+        return service.research_target_publication_time(platform_id)
+
+    @mcp.tool()
+    def refresh_target_research() -> dict[str, Any]:
+        """Store a registry snapshot for every target. This is not live research or machine verification."""
+        return service.refresh_target_research()
+
+    @mcp.tool()
+    def generate_seo_event_content(
+        event_name: str,
+        event_description: str,
+        event_start_datetime: str,
+        event_timezone: str,
+        landing_page_url: str,
+        registration_url: str,
+        organizer_name: str,
+        target_website: str,
+        event_end_datetime: str | None = None,
+        location: str | None = None,
+        virtual_event_details: str | None = None,
+        target_audience: str | None = None,
+        primary_keyword: str | None = None,
+        secondary_keywords: list[str] | None = None,
+        content_source: str = "template",
+        content_language: str = "en",
+    ) -> dict[str, Any]:
+        """Draft listing copy from supplied facts. The only supported content_source is template.
+
+        seo-agent stays disconnected. Other content_source values are rejected and are not relabeled as template.
+        The official event name is kept in full even when it exceeds the title limit.
+        """
+        return service.generate_seo_event_content(
+            event_name=event_name,
+            event_description=event_description,
+            event_start_datetime=event_start_datetime,
+            event_timezone=event_timezone,
+            landing_page_url=landing_page_url,
+            registration_url=registration_url,
+            organizer_name=organizer_name,
+            target_website=target_website,
+            event_end_datetime=event_end_datetime,
+            location=location,
+            virtual_event_details=virtual_event_details,
+            target_audience=target_audience,
+            primary_keyword=primary_keyword,
+            secondary_keywords=secondary_keywords,
+            content_source=content_source,
+            content_language=content_language,
+        )
+
+    @mcp.tool()
+    def analyze_event_publishing_deadlines(
+        event_name: str,
+        event_start_datetime: str,
+        event_timezone: str,
+        submission_datetime: str | None = None,
+        publication_deadline_buffer_hours: int = 24,
+        conservative_fallback_hours: int | None = None,
+        allow_paid: bool = False,
+        virtual_event: bool | None = None,
+        event_id: str | None = None,
+        documented_hours_by_platform: dict[str, int] | None = None,
+        documented_business_days_by_platform: dict[str, int] | None = None,
+        official_publication_windows_by_platform: dict[str, Any] | None = None,
+        pricing_evidence_by_platform: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Classify every non-workflow target against the timezone-aware event start.
+
+        A complete citation is not source verification. kind guarantee does not make a target ELIGIBLE.
+        A human_verification name, timestamp, and claim are not authentication. No trusted verification
+        workflow is configured, so those citations stay unverified and require manual review.
+        Machine verification is not performed. Unknown timelines stay out of the default recommendation.
+        A pricing citation, including classification verified_free, is a claim. It does not set
+        free_submission_available and does not make caller-supplied or heuristic windows eligible.
+        """
+        return service.analyze_event_publishing_deadlines(
+            event_name=event_name,
+            event_start_datetime=event_start_datetime,
+            event_timezone=event_timezone,
+            submission_datetime=submission_datetime,
+            publication_deadline_buffer_hours=publication_deadline_buffer_hours,
+            conservative_fallback_hours=conservative_fallback_hours,
+            allow_paid=allow_paid,
+            virtual_event=virtual_event,
+            event_id=event_id,
+            documented_hours_by_platform=documented_hours_by_platform,
+            documented_business_days_by_platform=documented_business_days_by_platform,
+            official_publication_windows_by_platform=official_publication_windows_by_platform,
+            pricing_evidence_by_platform=pricing_evidence_by_platform,
+        )
+
+    @mcp.tool()
+    def recommend_submission_targets(
+        event_name: str,
+        event_start_datetime: str,
+        event_timezone: str,
+        submission_datetime: str | None = None,
+        publication_deadline_buffer_hours: int = 24,
+        conservative_fallback_hours: int | None = None,
+        event_id: str | None = None,
+        documented_hours_by_platform: dict[str, int] | None = None,
+        documented_business_days_by_platform: dict[str, int] | None = None,
+        official_publication_windows_by_platform: dict[str, Any] | None = None,
+        pricing_evidence_by_platform: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Return the default plan. Unknown and claimed pricing, unknown timelines, and unverified citations stay excluded.
+
+        Timing arguments match analyze_event_publishing_deadlines. A verified_free classification
+        and caller-supplied verification metadata cannot make a target ELIGIBLE. Paid options stay excluded.
+        """
+        return service.recommend_submission_targets(
+            event_name=event_name,
+            event_start_datetime=event_start_datetime,
+            event_timezone=event_timezone,
+            submission_datetime=submission_datetime,
+            publication_deadline_buffer_hours=publication_deadline_buffer_hours,
+            conservative_fallback_hours=conservative_fallback_hours,
+            event_id=event_id,
+            documented_hours_by_platform=documented_hours_by_platform,
+            documented_business_days_by_platform=documented_business_days_by_platform,
+            official_publication_windows_by_platform=official_publication_windows_by_platform,
+            pricing_evidence_by_platform=pricing_evidence_by_platform,
+        )
+
+    @mcp.tool()
+    def preview_submission_plan(
+        event_name: str,
+        event_start_datetime: str,
+        event_timezone: str,
+        submission_datetime: str | None = None,
+        publication_deadline_buffer_hours: int = 24,
+        conservative_fallback_hours: int | None = None,
+        event_id: str | None = None,
+        documented_hours_by_platform: dict[str, int] | None = None,
+        documented_business_days_by_platform: dict[str, int] | None = None,
+        official_publication_windows_by_platform: dict[str, Any] | None = None,
+        pricing_evidence_by_platform: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Preview the same default plan as recommend_submission_targets. The preview does not publish.
+
+        Unverified citations stay in manual review. Machine verification is not claimed.
+        """
+        return service.preview_submission_plan(
+            event_name=event_name,
+            event_start_datetime=event_start_datetime,
+            event_timezone=event_timezone,
+            submission_datetime=submission_datetime,
+            publication_deadline_buffer_hours=publication_deadline_buffer_hours,
+            conservative_fallback_hours=conservative_fallback_hours,
+            event_id=event_id,
+            documented_hours_by_platform=documented_hours_by_platform,
+            documented_business_days_by_platform=documented_business_days_by_platform,
+            official_publication_windows_by_platform=official_publication_windows_by_platform,
+            pricing_evidence_by_platform=pricing_evidence_by_platform,
+        )
+
+    @mcp.tool()
+    def submit_event_dry_run(event_id: str, platform_id: str) -> dict[str, Any]:
+        """Run the existing submit path with dry-run forced on and publication authorization forced off."""
+        return service.submit_event_dry_run(event_id, platform_id)
+
+    @mcp.resource(
+        "event-seo://publication-policies",
+        name="publication_policies",
+        description="Read-only registry publication policies. Timelines are unknown unless already cited.",
+        mime_type="application/json",
+    )
+    def publication_policies() -> str:
+        return json.dumps(service.get_target_publication_policy())
+
+    @mcp.prompt(name="check_event_deadlines", description="Ask for an explainable free-site submission plan.")
+    def check_event_deadlines(event_name: str, event_start_datetime: str, event_timezone: str) -> str:
+        return (
+            f"Use analyze_event_publishing_deadlines for {event_name} starting {event_start_datetime} "
+            f"({event_timezone}). Do not treat unknown publication times as eligible, and do not publish."
         )
 
     @mcp.tool()

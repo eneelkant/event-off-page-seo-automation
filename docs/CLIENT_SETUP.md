@@ -71,6 +71,10 @@ See `.cursor/mcp.json.example` → `event-off-page-seo-stdio-local`.
 MCP_TRANSPORT=stdio python -m event_seo_mcp.server
 ```
 
+## Planning tools
+
+`analyze_event_publishing_deadlines`, `recommend_submission_targets`, and `preview_submission_plan` share the same timing arguments and the same verification state. A citation with a URL, date, summary, and `kind: "guarantee"` is only structurally complete. Adding a verifier name, timestamp, and claim does not authenticate that review, so the target stays `unverified` and is not `ELIGIBLE`. A pricing packet with `classification: "verified_free"`, a URL, a date, and a reason is also only a claim. It does not set `free_submission_available`, and unknown or claimed pricing stays out of the default plan. The server does not fetch pages and does not report machine or live pricing verification. `generate_seo_event_content` accepts only `content_source=template`. These tools do not publish. See `docs/PUBLISHING_ENGINE.md`.
+
 ## Auth reminder
 
 - Production `/mcp` requires `Authorization: Bearer <MCP_AUTH_TOKEN>`.

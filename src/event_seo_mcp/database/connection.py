@@ -118,6 +118,12 @@ CREATE TABLE IF NOT EXISTS registry_snapshots (
     created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS target_research_snapshots (
+    platform_id TEXT PRIMARY KEY,
+    payload_json TEXT NOT NULL,
+    refreshed_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS sheet_submission_links (
     event_id TEXT NOT NULL,
     site_key TEXT NOT NULL,
