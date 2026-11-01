@@ -5,9 +5,12 @@ from __future__ import annotations
 import ipaddress
 import json
 import sqlite3
+import threading
 import time
 
 import pytest
+
+import event_seo_mcp.publishing.source_verification as source_verification
 
 from event_seo_mcp.publishing.intelligence import ELIGIBLE, ELIGIBLE_WITH_RISK, MANUAL_REVIEW_REQUIRED
 from event_seo_mcp.publishing.source_verification import (
@@ -280,6 +283,107 @@ def test_connection_uses_the_validated_address_once(monkeypatch: pytest.MonkeyPa
     assert seen["address"] == (str(PUBLIC_IP), 443)
     assert lookups["n"] == 1
     assert fetcher.pinned_ips == [str(PUBLIC_IP)]
+
+
+def _blocking_gate(monkeypatch: pytest.MonkeyPatch, limit: int) -> tuple[source_verification._DnsGate, threading.Event]:
+    gate = source_verification._DnsGate(limit)
+    monkeypatch.setattr(source_verification, "_dns_gate", gate)
+    return gate, threading.Event()
+
+
+def test_repeated_timeouts_do_not_grow_resolver_work(monkeypatch: pytest.MonkeyPatch) -> None:
+    gate, release = _blocking_gate(monkeypatch, 2)
+    entered: list[int] = []
+    enough = threading.Event()
+
+    def resolver(_host: str):
+        entered.append(1)
+        if len(entered) >= 2:
+            enough.set()
+        release.wait(2)
+        return [PUBLIC_IP]
+
+    def opener(_url: str, _timeout: float):
+        raise AssertionError("a capped lookup must not connect")
+
+    fetcher = SourceFetcher(resolver=resolver, opener=opener, timeout=0.05)
+    try:
+        timed_out = [fetcher.fetch(OFFICIAL) for _ in range(2)]
+        assert enough.wait(1)
+        exhausted = [fetcher.fetch(OFFICIAL) for _ in range(4)]
+    finally:
+        release.set()
+    assert [item.reason for item in timed_out] == ["the source host lookup timed out", "the source host lookup timed out"]
+    assert [item.reason for item in exhausted] == ["resolver capacity is exhausted"] * 4
+    assert all(item.outcome == "unavailable" and item.body is None for item in timed_out + exhausted)
+    assert len(entered) == 2
+    assert gate.peak == 2
+
+
+def test_concurrent_lookups_respect_the_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    gate, release = _blocking_gate(monkeypatch, 2)
+    running = {"n": 0, "peak": 0}
+    lock = threading.Lock()
+
+    def resolver(_host: str):
+        with lock:
+            running["n"] += 1
+            running["peak"] = max(running["peak"], running["n"])
+        release.wait(2)
+        with lock:
+            running["n"] -= 1
+        return [PUBLIC_IP]
+
+    def opener(_url: str, _timeout: float):
+        raise AssertionError("must not connect")
+
+    results: list[source_verification.FetchResult | None] = [None] * 6
+
+    def one(index: int) -> None:
+        results[index] = SourceFetcher(resolver=resolver, opener=opener, timeout=0.05).fetch(OFFICIAL)
+
+    workers = [threading.Thread(target=one, args=(index,)) for index in range(6)]
+    try:
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join(2)
+    finally:
+        release.set()
+        for worker in workers:
+            worker.join(2)
+    assert all(item is not None and item.outcome == "unavailable" and item.body is None for item in results)
+    assert sum(item.reason == "resolver capacity is exhausted" for item in results if item is not None) == 4
+    assert running["peak"] <= 2
+    assert gate.peak == 2
+
+
+def test_late_resolver_result_is_never_used(monkeypatch: pytest.MonkeyPatch) -> None:
+    _gate, release = _blocking_gate(monkeypatch, 1)
+    finished = threading.Event()
+    calls: list[str] = []
+
+    def resolver(_host: str):
+        release.wait(2)
+        finished.set()
+        return [PUBLIC_IP]
+
+    def opener(url: str, _timeout: float):
+        calls.append(url)
+        raise AssertionError("late result must not connect")
+
+    fetcher = SourceFetcher(resolver=resolver, opener=opener, timeout=0.05)
+    try:
+        result = fetcher.fetch(OFFICIAL)
+        assert result.outcome == "unavailable"
+        assert result.reason == "the source host lookup timed out"
+        assert fetcher.pinned_ips == []
+        assert calls == []
+    finally:
+        release.set()
+    assert finished.wait(1)
+    assert fetcher.pinned_ips == []
+    assert calls == []
 
 
 def test_private_dns_answer_never_connects() -> None:

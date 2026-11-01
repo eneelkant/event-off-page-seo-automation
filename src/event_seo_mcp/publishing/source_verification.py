@@ -4,9 +4,10 @@ Caller citations and verification flags stay untrusted. A trusted record is
 written only after this module fetches the platform's registered HTTPS
 documentation URL and reads a structured document. HTML, free text, and
 model output are not proof. Non-canonical numeric hosts are rejected before
-DNS. Lookup time is bounded, every resolved address is checked, and the
-connection uses one validated address. A stored row is applied only when it
-still matches that official host and the same structural checks. The trusted
+DNS. Lookup time is bounded, outstanding lookups are capped, every resolved
+address is checked, and the connection uses one validated address. A stored
+row is applied only when it still matches that official host and the same
+structural checks. The trusted
 row and its audit entry commit together. Live fetching is disabled unless
 LIVE_SOURCE_VERIFICATION_ENABLED is set, and the call must present the
 server-side operator token. Planning tools cannot write these records.
@@ -14,13 +15,13 @@ server-side operator token. Planning tools cannot write these records.
 
 from __future__ import annotations
 
-import concurrent.futures
 import hashlib
 import hmac
 import ipaddress
 import json
 import socket
 import ssl
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from http.client import HTTPSConnection
@@ -63,6 +64,7 @@ _BLOCKED_HOSTS = frozenset(
         "instance-data.ec2.internal",
     }
 )
+DNS_LOOKUP_LIMIT = 4
 _EXTRA_BLOCKED_NETWORKS = (
     ipaddress.ip_network("100.64.0.0/10"),
     ipaddress.ip_network("100.100.100.200/32"),
@@ -230,6 +232,47 @@ def _pinned_open(url: str, timeout: float, pinned_ip: str, max_bytes: int) -> tu
     return status, headers, body
 
 
+class _LookupFailed(Exception):
+    """A lookup could not run. The caller must not connect."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+class _DnsGate:
+    """Cap lookups that are running, including ones that already timed out."""
+
+    def __init__(self, limit: int) -> None:
+        if limit < 1:
+            raise ValueError("dns lookup limit must be at least 1")
+        self.limit = limit
+        self._lock = threading.Lock()
+        self._inflight = 0
+        self.peak = 0
+
+    @property
+    def inflight(self) -> int:
+        with self._lock:
+            return self._inflight
+
+    def try_acquire(self) -> bool:
+        with self._lock:
+            if self._inflight >= self.limit:
+                return False
+            self._inflight += 1
+            self.peak = max(self.peak, self._inflight)
+            return True
+
+    def release(self) -> None:
+        with self._lock:
+            if self._inflight > 0:
+                self._inflight -= 1
+
+
+_dns_gate = _DnsGate(DNS_LOOKUP_LIMIT)
+
+
 class SourceFetcher:
     """Fetch one HTTPS URL with redirect, DNS, and size limits. Does not follow blindly."""
 
@@ -270,6 +313,8 @@ class SourceFetcher:
                 )
             try:
                 addresses = self._resolve(checked.host)
+            except _LookupFailed as exc:
+                return FetchResult("unavailable", exc.reason, retrieved_at=retrieved_at)
             except TimeoutError:
                 return FetchResult("unavailable", "the source host lookup timed out", retrieved_at=retrieved_at)
             except OSError:
@@ -317,21 +362,42 @@ class SourceFetcher:
         return FetchResult("blocked", "too many redirects", retrieved_at=retrieved_at)
 
     def _resolve(self, host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
-        """Resolve once, with a deadline. A late result is ignored."""
+        """Resolve once, with a deadline. A late result is ignored and does not connect."""
         if self.timeout <= 0:
             raise TimeoutError("dns lookup timed out")
-        pool = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="source-dns")
-        future = pool.submit(self.resolver, host)
+        gate = _dns_gate
+        if not gate.try_acquire():
+            raise _LookupFailed("resolver capacity is exhausted")
+        holder: dict[str, Any] = {}
+        finished = threading.Event()
+
+        def run() -> None:
+            try:
+                holder["value"] = self.resolver(host)
+            except Exception as exc:
+                holder["error"] = exc
+            finally:
+                finished.set()
+                gate.release()
+
+        started = False
         try:
-            resolved = future.result(timeout=self.timeout)
-        except concurrent.futures.TimeoutError as exc:
-            raise TimeoutError("dns lookup timed out") from exc
-        except (TimeoutError, OSError):
-            raise
-        except Exception as exc:
-            raise OSError("the source host could not be resolved") from exc
+            worker = threading.Thread(target=run, name="source-dns", daemon=True)
+            worker.start()
+            started = True
+            if not finished.wait(self.timeout):
+                raise TimeoutError("dns lookup timed out")
         finally:
-            pool.shutdown(wait=False, cancel_futures=True)
+            if not started:
+                gate.release()
+        error = holder.get("error")
+        if isinstance(error, TimeoutError):
+            raise TimeoutError("dns lookup timed out") from error
+        if isinstance(error, OSError):
+            raise error
+        if error is not None:
+            raise OSError("the source host could not be resolved") from error
+        resolved = holder.get("value")
         if not isinstance(resolved, list):
             raise OSError("resolver returned an unexpected result")
         return resolved
