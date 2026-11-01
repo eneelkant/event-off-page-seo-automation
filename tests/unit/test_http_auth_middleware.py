@@ -25,7 +25,11 @@ def test_bearer_required_for_mcp_path(settings: Settings, tmp_path) -> None:
 
         health = client.get("/healthz")
         assert health.status_code == 200
-        assert health.json()["status"] == "ok"
+        body = health.json()
+        assert body["status"] == "ok"
+        assert set(body) == {"status", "service", "version", "dry_run_default"}
+        assert "ga4_status" not in body
+        assert "ga4_property_id" not in body
 
         ok = client.post(
             "/mcp",

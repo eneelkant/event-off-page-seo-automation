@@ -44,6 +44,8 @@
 ## UTM and GA4
 
 - `ga4_disabled` is the default. Set `GA4_ENABLED=true` and `GA4_PROPERTY_ID` only when a report should run.
+- `health_check` reports `ga4_status` as `disabled`, `configured`, or `misconfigured`. `configured` means the property id is numeric and the optional GA4 client imports. It does not mean credentials were accepted. `misconfigured` means GA4 is enabled but the property id or the client package is missing. Startup logs one warning and continues. `GET /healthz` does not include this status or the property id.
+- Planning, UTM preview, and GA4 query attempts are stored in `audit_logs` with an outcome, a duration, and a short summary. The rows do not contain landing URLs, tokens, or credential paths. A failure to store the row does not change the tool result.
 - `ga4_client_missing` means the optional extra is not installed: `pip install -e ".[ga4]"`.
 - `authentication_error` means Application Default Credentials, or the file in `GOOGLE_APPLICATION_CREDENTIALS`, were missing or rejected. The tools do not print that file.
 - `quota_exceeded` means the Analytics Data API quota was consumed. Retry later. Do not invent replacement numbers.

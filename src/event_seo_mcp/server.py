@@ -13,6 +13,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from event_seo_mcp import __version__
+from event_seo_mcp.observability import warn_if_ga4_misconfigured
 from event_seo_mcp.database.connection import Database, get_database
 from event_seo_mcp.database.repository import Repository
 from event_seo_mcp.security.auth import SecurityError, validate_bind_address
@@ -102,6 +103,7 @@ def main(argv: list[str] | None = None) -> None:
     reset_settings_cache()
     settings = get_settings()
     configure_logging(settings.log_level)
+    warn_if_ga4_misconfigured(settings)
 
     transport = settings.mcp_transport
     if "--http" in argv or "--streamable-http" in argv:

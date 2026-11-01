@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
 from event_seo_mcp.database.repository import Repository
+from event_seo_mcp.observability import elapsed_ms, ga4_runtime_status, operation_summary, record_operation
 from event_seo_mcp.discovery.platform_discovery import (
     discover_platform,
     load_platforms_file,
@@ -23,7 +25,7 @@ from event_seo_mcp.schemas.content import ContentType, GeneratedContent
 from event_seo_mcp.schemas.event import EventRecord
 from event_seo_mcp.settings import Settings, get_settings
 from event_seo_mcp.tracking.backlinks import BacklinkVerifier
-from event_seo_mcp.tracking.plan import build_submission_tracking, take_tracking_request
+from event_seo_mcp.tracking.plan import TRACKING_FIELDS, build_submission_tracking, take_tracking_request
 from event_seo_mcp.tracking.utm import preview_event_utm_url
 from event_seo_mcp.integrations.google_sheets.service import SheetsWorkflow
 from event_seo_mcp.publishing.intelligence import PublishingIntelligence
@@ -42,6 +44,24 @@ class ToolService:
         self.publishing = PublishingIntelligence(repo, self.settings)
         sync_platforms_to_db(repo, self.settings)
 
+    def _audit(
+        self,
+        action: str,
+        *,
+        outcome: str,
+        started: float,
+        summary: str,
+        entity_id: str | None = None,
+    ) -> None:
+        record_operation(
+            self.repo,
+            action,
+            outcome=outcome,
+            duration_ms=elapsed_ms(started),
+            summary=summary,
+            entity_id=entity_id if isinstance(entity_id, str) else None,
+        )
+
     def health_check(self) -> dict[str, Any]:
         return {
             "status": "ok",
@@ -49,7 +69,9 @@ class ToolService:
             "transport_default": self.settings.mcp_transport,
             "database": str(self.settings.resolved_database_path),
             "dry_run_default": self.settings.dry_run_default,
+            "live_source_verification_enabled": self.settings.live_source_verification_enabled,
             "ga4_enabled": self.settings.ga4_enabled,
+            "ga4_status": ga4_runtime_status(self.settings),
             "adapters": self.capabilities.adapter_health(),
             "integrations": self.capabilities.full_health()["integrations"],
             "providers": self.capabilities.full_health()["providers"],
@@ -420,14 +442,37 @@ class ToolService:
         return self.publishing.generate_seo_content(**payload)
 
     def analyze_event_publishing_deadlines(self, **payload: Any) -> dict[str, Any]:
-        return self.publishing.analyze_deadlines(**payload)
+        entity_id = payload.get("event_id")
+        started = time.perf_counter()
+        try:
+            result = self.publishing.analyze_deadlines(**payload)
+        except Exception:
+            self._audit(
+                "planning",
+                outcome="failure",
+                started=started,
+                summary="unexpected_error",
+                entity_id=entity_id if isinstance(entity_id, str) else None,
+            )
+            raise
+        outcome, summary = operation_summary(result, success_code="planned")
+        self._audit("planning", outcome=outcome, started=started, summary=summary, entity_id=entity_id if isinstance(entity_id, str) else None)
+        return result
 
     def recommend_submission_targets(self, **payload: Any) -> dict[str, Any]:
         payload = dict(payload)
         payload["allow_paid"] = False
         tracking_request = take_tracking_request(payload)
-        analysis = self.publishing.analyze_deadlines(**payload)
+        entity_id = payload.get("event_id") if isinstance(payload.get("event_id"), str) else None
+        started = time.perf_counter()
+        try:
+            analysis = self.publishing.analyze_deadlines(**payload)
+        except Exception:
+            self._audit("planning", outcome="failure", started=started, summary="unexpected_error", entity_id=entity_id)
+            raise
         if analysis.get("error"):
+            outcome, summary = operation_summary(analysis, success_code="planned")
+            self._audit("planning", outcome=outcome, started=started, summary=summary, entity_id=entity_id)
             return analysis
         result = {
             "recommended_submission_order": analysis["recommended_submission_order"],
@@ -465,10 +510,29 @@ class ToolService:
             ],
         }
         if tracking_request is not None:
-            tracking = build_submission_tracking(
-                list(analysis["recommended_submission_order"]),
-                tracking_request,
-                self.settings,
+            utm_started = time.perf_counter()
+            try:
+                tracking = build_submission_tracking(
+                    list(analysis["recommended_submission_order"]),
+                    tracking_request,
+                    self.settings,
+                )
+            except Exception:
+                self._audit(
+                    "utm_generation",
+                    outcome="failure",
+                    started=utm_started,
+                    summary="unexpected_error",
+                    entity_id=entity_id,
+                )
+                raise
+            utm_outcome, utm_summary = operation_summary(tracking, success_code="tracked_url")
+            self._audit(
+                "utm_generation",
+                outcome=utm_outcome,
+                started=utm_started,
+                summary=utm_summary,
+                entity_id=entity_id,
             )
             result["submission_tracking"] = tracking
             by_id = {item["target_id"]: item for item in tracking["links"]}
@@ -479,12 +543,33 @@ class ToolService:
                 row["canonical_landing_page_url"] = link["canonical_landing_page_url"]
                 row["tracked_landing_page_url"] = link["tracked_landing_page_url"]
                 row["utm_parameter_preservation"] = "unknown"
+        plan_outcome, plan_summary = operation_summary(result, success_code="planned")
+        self._audit("planning", outcome=plan_outcome, started=started, summary=plan_summary, entity_id=entity_id)
         return result
 
     def preview_submission_plan(self, **payload: Any) -> dict[str, Any]:
         payload = dict(payload)
         payload["allow_paid"] = False
-        return self.publishing.preview_plan(**payload)
+        tracking_requested = any(payload.get(key) not in (None, "") for key in TRACKING_FIELDS)
+        entity_id = payload.get("event_id") if isinstance(payload.get("event_id"), str) else None
+        started = time.perf_counter()
+        try:
+            result = self.publishing.preview_plan(**payload)
+        except Exception:
+            self._audit("planning", outcome="failure", started=started, summary="unexpected_error", entity_id=entity_id)
+            raise
+        outcome, summary = operation_summary(result, success_code="planned")
+        self._audit("planning", outcome=outcome, started=started, summary=summary, entity_id=entity_id)
+        if tracking_requested and isinstance(result, dict) and "submission_tracking" in result:
+            utm_outcome, utm_summary = operation_summary(result["submission_tracking"], success_code="tracked_url")
+            self._audit(
+                "utm_generation",
+                outcome=utm_outcome,
+                started=started,
+                summary=utm_summary,
+                entity_id=entity_id,
+            )
+        return result
 
     def verify_publication_source(
         self,
@@ -530,14 +615,22 @@ class ToolService:
         conflict_policy: str | None = None,
     ) -> dict[str, Any]:
         """Dry-run a tracked URL. The stored canonical landing page is not modified."""
-        return preview_event_utm_url(
-            base_url,
-            platform,
-            campaign_name,
-            medium=medium or self.settings.utm_default_medium,
-            content=content or self.settings.utm_default_content,
-            conflict_policy=conflict_policy or self.settings.utm_conflict_policy,
-        )
+        started = time.perf_counter()
+        try:
+            result = preview_event_utm_url(
+                base_url,
+                platform,
+                campaign_name,
+                medium=medium or self.settings.utm_default_medium,
+                content=content or self.settings.utm_default_content,
+                conflict_policy=conflict_policy or self.settings.utm_conflict_policy,
+            )
+        except Exception:
+            self._audit("utm_generation", outcome="failure", started=started, summary="unexpected_error")
+            raise
+        outcome, summary = operation_summary(result, success_code="tracked_url")
+        self._audit("utm_generation", outcome=outcome, started=started, summary=summary)
+        return result
 
     def query_ga4_campaign_performance(
         self,
@@ -552,17 +645,25 @@ class ToolService:
         client: Any | None = None,
     ) -> dict[str, Any]:
         """Read a GA4 campaign report. Disabled by default. Never writes to GA4."""
-        return query_ga4_from_settings(
-            self.settings,
-            campaign_name,
-            start_date=start_date,
-            end_date=end_date,
-            source=source,
-            medium=medium,
-            page_path=page_path,
-            include_conversions=include_conversions,
-            client=client,
-        )
+        started = time.perf_counter()
+        try:
+            result = query_ga4_from_settings(
+                self.settings,
+                campaign_name,
+                start_date=start_date,
+                end_date=end_date,
+                source=source,
+                medium=medium,
+                page_path=page_path,
+                include_conversions=include_conversions,
+                client=client,
+            )
+        except Exception:
+            self._audit("ga4_query", outcome="failure", started=started, summary="unexpected_error")
+            raise
+        outcome, summary = operation_summary(result, success_code="report")
+        self._audit("ga4_query", outcome=outcome, started=started, summary=summary)
+        return result
 
     def audit_campaign_attribution(
         self,
