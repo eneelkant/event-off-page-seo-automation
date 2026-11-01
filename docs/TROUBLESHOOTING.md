@@ -41,6 +41,17 @@
 - Dry-run does not contact the website. Live publication still requires `authorize_publication=true` and a confirmed official API. Other sites return `MANUAL_ACTION_REQUIRED`.
 - `record_publication_update` will not mark `PUBLISHED` without an http(s) URL and a publication date.
 
+## UTM and GA4
+
+- `ga4_disabled` is the default. Set `GA4_ENABLED=true` and `GA4_PROPERTY_ID` only when a report should run.
+- `ga4_client_missing` means the optional extra is not installed: `pip install -e ".[ga4]"`.
+- `authentication_error` means Application Default Credentials, or the file in `GOOGLE_APPLICATION_CREDENTIALS`, were missing or rejected. The tools do not print that file.
+- `quota_exceeded` means the Analytics Data API quota was consumed. Retry later. Do not invent replacement numbers.
+- `timeout` means the read exceeded `GA4_TIMEOUT_SECONDS` (default 30). A timeout is not a zero-session result.
+- An empty report has `data_state` `empty`, `rows` `[]`, and `error` null. That is not proof that tracking is broken. Delay, consent, traffic, attribution, and the date range can all hide visits.
+- A session with the expected campaign is not proof of a backlink. Use `verify_backlink` only when a published page can actually be checked.
+- `utm_parameter_preservation` stays `unknown` because a directory may remove query parameters.
+
 ## Platform still NEEDS_VERIFICATION
 
 - By design until a human verifies the real submission URL/API.

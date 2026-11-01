@@ -23,6 +23,7 @@ from event_seo_mcp.providers.template_provider import TemplateProvider
 from event_seo_mcp.publishing.source_verification import STRUCTURED_DOCUMENT, apply_trusted_records
 from event_seo_mcp.schemas.platform import PlatformRecord
 from event_seo_mcp.settings import Settings
+from event_seo_mcp.tracking.plan import build_submission_tracking, take_tracking_request
 
 ELIGIBLE = "ELIGIBLE"
 ELIGIBLE_WITH_RISK = "ELIGIBLE_WITH_RISK"
@@ -582,6 +583,7 @@ class PublishingIntelligence:
         }
 
     def preview_plan(self, **kwargs: Any) -> dict[str, Any]:
+        tracking_request = take_tracking_request(kwargs)
         analysis = self.analyze_deadlines(**kwargs)
         if analysis.get("error"):
             return analysis
@@ -606,7 +608,7 @@ class PublishingIntelligence:
                     "would_publish": False,
                 }
             )
-        return {
+        body: dict[str, Any] = {
             "preview": previews,
             "dry_run": True,
             "would_publish": False,
@@ -614,6 +616,22 @@ class PublishingIntelligence:
             "machine_verification_performed": False,
             "analysis": analysis,
         }
+        if tracking_request is not None:
+            tracking = build_submission_tracking(
+                [row["target_id"] for row in previews],
+                tracking_request,
+                self.settings,
+            )
+            body["submission_tracking"] = tracking
+            by_id = {item["target_id"]: item for item in tracking["links"]}
+            for preview in previews:
+                link = by_id.get(preview["target_id"])
+                if link is None:
+                    continue
+                preview["canonical_landing_page_url"] = link["canonical_landing_page_url"]
+                preview["tracked_landing_page_url"] = link["tracked_landing_page_url"]
+                preview["utm_parameter_preservation"] = "unknown"
+        return body
 
     def _decide(
         self,
