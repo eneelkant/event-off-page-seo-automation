@@ -4,8 +4,11 @@ Caller citations and verification flags stay untrusted. A trusted record is
 written only after this module fetches the platform's registered HTTPS
 documentation URL and reads a structured document. HTML, free text, and
 model output are not proof. Non-canonical numeric hosts are rejected before
-DNS. A stored row is applied only when it still matches that official host
-and the same structural checks. Live fetching is disabled unless
+DNS. Lookup time is bounded, outstanding lookups are capped, every resolved
+address is checked, and the connection uses one validated address. A stored
+row is applied only when it still matches that official host and the same
+structural checks. The trusted
+row and its audit entry commit together. Live fetching is disabled unless
 LIVE_SOURCE_VERIFICATION_ENABLED is set, and the call must present the
 server-side operator token. Planning tools cannot write these records.
 """
@@ -18,6 +21,7 @@ import ipaddress
 import json
 import socket
 import ssl
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from http.client import HTTPSConnection
@@ -60,6 +64,7 @@ _BLOCKED_HOSTS = frozenset(
         "instance-data.ec2.internal",
     }
 )
+DNS_LOOKUP_LIMIT = 4
 _EXTRA_BLOCKED_NETWORKS = (
     ipaddress.ip_network("100.64.0.0/10"),
     ipaddress.ip_network("100.100.100.200/32"),
@@ -227,6 +232,47 @@ def _pinned_open(url: str, timeout: float, pinned_ip: str, max_bytes: int) -> tu
     return status, headers, body
 
 
+class _LookupFailed(Exception):
+    """A lookup could not run. The caller must not connect."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+class _DnsGate:
+    """Cap lookups that are running, including ones that already timed out."""
+
+    def __init__(self, limit: int) -> None:
+        if limit < 1:
+            raise ValueError("dns lookup limit must be at least 1")
+        self.limit = limit
+        self._lock = threading.Lock()
+        self._inflight = 0
+        self.peak = 0
+
+    @property
+    def inflight(self) -> int:
+        with self._lock:
+            return self._inflight
+
+    def try_acquire(self) -> bool:
+        with self._lock:
+            if self._inflight >= self.limit:
+                return False
+            self._inflight += 1
+            self.peak = max(self.peak, self._inflight)
+            return True
+
+    def release(self) -> None:
+        with self._lock:
+            if self._inflight > 0:
+                self._inflight -= 1
+
+
+_dns_gate = _DnsGate(DNS_LOOKUP_LIMIT)
+
+
 class SourceFetcher:
     """Fetch one HTTPS URL with redirect, DNS, and size limits. Does not follow blindly."""
 
@@ -246,11 +292,13 @@ class SourceFetcher:
         self.max_bytes = max_bytes
         self.max_redirects = max_redirects
         self.now = now or (lambda: datetime.now(timezone.utc))
+        self.pinned_ips: list[str] = []
 
     def fetch(self, url: str) -> FetchResult:
         retrieved_at = self.now().isoformat()
         current = url
         original_host: str | None = None
+        self.pinned_ips = []
         for _hop in range(self.max_redirects + 1):
             checked = inspect_https_url(current)
             if not checked.ok:
@@ -264,7 +312,11 @@ class SourceFetcher:
                     retrieved_at=retrieved_at,
                 )
             try:
-                addresses = self.resolver(checked.host)
+                addresses = self._resolve(checked.host)
+            except _LookupFailed as exc:
+                return FetchResult("unavailable", exc.reason, retrieved_at=retrieved_at)
+            except TimeoutError:
+                return FetchResult("unavailable", "the source host lookup timed out", retrieved_at=retrieved_at)
             except OSError:
                 return FetchResult("unavailable", "the source host could not be resolved", retrieved_at=retrieved_at)
             if not addresses or any(_disallowed_ip(address) for address in addresses):
@@ -309,7 +361,49 @@ class SourceFetcher:
             )
         return FetchResult("blocked", "too many redirects", retrieved_at=retrieved_at)
 
+    def _resolve(self, host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
+        """Resolve once, with a deadline. A late result is ignored and does not connect."""
+        if self.timeout <= 0:
+            raise TimeoutError("dns lookup timed out")
+        gate = _dns_gate
+        if not gate.try_acquire():
+            raise _LookupFailed("resolver capacity is exhausted")
+        holder: dict[str, Any] = {}
+        finished = threading.Event()
+
+        def run() -> None:
+            try:
+                holder["value"] = self.resolver(host)
+            except Exception as exc:
+                holder["error"] = exc
+            finally:
+                finished.set()
+                gate.release()
+
+        started = False
+        try:
+            worker = threading.Thread(target=run, name="source-dns", daemon=True)
+            worker.start()
+            started = True
+            if not finished.wait(self.timeout):
+                raise TimeoutError("dns lookup timed out")
+        finally:
+            if not started:
+                gate.release()
+        error = holder.get("error")
+        if isinstance(error, TimeoutError):
+            raise TimeoutError("dns lookup timed out") from error
+        if isinstance(error, OSError):
+            raise error
+        if error is not None:
+            raise OSError("the source host could not be resolved") from error
+        resolved = holder.get("value")
+        if not isinstance(resolved, list):
+            raise OSError("resolver returned an unexpected result")
+        return resolved
+
     def _request(self, url: str, pinned_ip: str) -> tuple[int, dict[str, str], bytes]:
+        self.pinned_ips.append(pinned_ip)
         if self.opener is not None:
             return self.opener(url, self.timeout)
         return _pinned_open(url, self.timeout, pinned_ip, self.max_bytes)
@@ -456,7 +550,6 @@ def verify_source(
     )
     fetched = active.fetch(source_url)
     if fetched.outcome != "ok":
-        removed = _delete_trusted(repo, platform_id, evidence_type)
         return _finish(
             repo,
             secret,
@@ -470,17 +563,16 @@ def verify_source(
             method=None,
             detail=fetched.reason,
             live_fetch_attempted=True,
-            prior_removed=removed,
+            mutation=_trusted_delete_statement(platform_id, evidence_type),
+            count_removal=True,
             extra={
                 "message": fetched.reason,
                 "manual_review_required": True,
                 "live_source_verification_enabled": True,
-                "prior_trusted_record_removed": removed,
             },
         )
     interpreted = _interpret(fetched, evidence_type, platform_id)
     if interpreted is None:
-        removed = _delete_trusted(repo, platform_id, evidence_type)
         reason = _interpret_problem(fetched, evidence_type, platform_id)
         return _finish(
             repo,
@@ -495,15 +587,14 @@ def verify_source(
             method="uninterpreted_response",
             detail=reason,
             live_fetch_attempted=True,
-            prior_removed=removed,
+            mutation=_trusted_delete_statement(platform_id, evidence_type),
+            count_removal=True,
             extra={
                 "message": reason,
                 "manual_review_required": True,
                 "live_source_verification_enabled": True,
-                "prior_trusted_record_removed": removed,
             },
         )
-    _save_trusted(repo, platform_id, evidence_type, fetched, interpreted)
     return _finish(
         repo,
         secret,
@@ -519,6 +610,7 @@ def verify_source(
         live_fetch_attempted=True,
         machine_verification_performed=True,
         trusted_record_updated=True,
+        mutation=_trusted_upsert_statement(platform_id, evidence_type, fetched, interpreted),
         extra={
             "message": "Structured official document verified.",
             "manual_review_required": False,
@@ -740,14 +832,13 @@ def _safe_id(platform_id: Any) -> str | None:
     return platform_id
 
 
-def _save_trusted(
-    repo: Repository,
+def _trusted_upsert_statement(
     platform_id: str,
     evidence_type: str,
     fetched: FetchResult,
     interpreted: dict[str, Any],
-) -> None:
-    repo.db.execute(
+) -> tuple[str, tuple]:
+    return (
         """
         INSERT INTO trusted_source_verifications (
             platform_id, evidence_type, source_url, retrieved_at, outcome,
@@ -774,12 +865,11 @@ def _save_trusted(
     )
 
 
-def _delete_trusted(repo: Repository, platform_id: str, evidence_type: str) -> bool:
-    cursor = repo.db.execute(
+def _trusted_delete_statement(platform_id: str, evidence_type: str) -> tuple[str, tuple]:
+    return (
         "DELETE FROM trusted_source_verifications WHERE platform_id = ? AND evidence_type = ?",
         (platform_id, evidence_type),
     )
-    return cursor.rowcount > 0
 
 
 def _sanitize_summary(value: Any) -> str | None:
@@ -848,33 +938,41 @@ def _finish(
     live_fetch_attempted: bool = False,
     machine_verification_performed: bool = False,
     trusted_record_updated: bool = False,
-    prior_removed: bool = False,
+    mutation: tuple[str, tuple] | None = None,
+    count_removal: bool = False,
     error: str | None = None,
 ) -> dict[str, Any]:
     clean_detail = _scrub(detail, secret)
     clean_summary = _scrub(summary, secret)
     platform_id = _scrub(platform_id, secret)
     source_url = _scrub(source_url, secret)
-    repo.db.execute(
-        """
-        INSERT INTO verification_audit_log (
-            created_at, actor, operation, platform_id, source_url, retrieved_at,
-            outcome, evidence_summary, verification_method, detail
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
+    statements: list[tuple[str, tuple | list]] = []
+    if mutation is not None:
+        statements.append(mutation)
+    statements.append(
         (
-            datetime.now(timezone.utc).isoformat(),
-            actor,
-            operation,
-            platform_id,
-            source_url,
-            retrieved_at,
-            outcome,
-            clean_summary,
-            method,
-            clean_detail,
-        ),
+            """
+            INSERT INTO verification_audit_log (
+                created_at, actor, operation, platform_id, source_url, retrieved_at,
+                outcome, evidence_summary, verification_method, detail
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                datetime.now(timezone.utc).isoformat(),
+                actor,
+                operation,
+                platform_id,
+                source_url,
+                retrieved_at,
+                outcome,
+                clean_summary,
+                method,
+                clean_detail,
+            ),
+        )
     )
+    counts = repo.db.execute_transaction(statements)
+    prior_removed = bool(count_removal and mutation is not None and counts[0] > 0)
     body = {
         "error": error or (f"verification_{outcome}" if outcome in {"unauthorized", "not_configured", "disabled"} else None),
         "outcome": outcome,
