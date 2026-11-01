@@ -16,11 +16,15 @@ from event_seo_mcp.discovery.platform_discovery import (
 from event_seo_mcp.orchestration.capability_registry import CapabilityRegistry
 from event_seo_mcp.orchestration.orchestrator import Orchestrator
 from event_seo_mcp.orchestration.publishing_rules import PublishingRulesEngine, credential_presence
+from event_seo_mcp.reporting.attribution import audit_campaign_attribution
 from event_seo_mcp.reporting.campaign import CampaignReporter
+from event_seo_mcp.reporting.ga4 import query_ga4_from_settings
 from event_seo_mcp.schemas.content import ContentType, GeneratedContent
 from event_seo_mcp.schemas.event import EventRecord
 from event_seo_mcp.settings import Settings, get_settings
 from event_seo_mcp.tracking.backlinks import BacklinkVerifier
+from event_seo_mcp.tracking.plan import build_submission_tracking, take_tracking_request
+from event_seo_mcp.tracking.utm import preview_event_utm_url
 from event_seo_mcp.integrations.google_sheets.service import SheetsWorkflow
 from event_seo_mcp.publishing.intelligence import PublishingIntelligence
 from event_seo_mcp import __version__
@@ -45,6 +49,7 @@ class ToolService:
             "transport_default": self.settings.mcp_transport,
             "database": str(self.settings.resolved_database_path),
             "dry_run_default": self.settings.dry_run_default,
+            "ga4_enabled": self.settings.ga4_enabled,
             "adapters": self.capabilities.adapter_health(),
             "integrations": self.capabilities.full_health()["integrations"],
             "providers": self.capabilities.full_health()["providers"],
@@ -420,10 +425,11 @@ class ToolService:
     def recommend_submission_targets(self, **payload: Any) -> dict[str, Any]:
         payload = dict(payload)
         payload["allow_paid"] = False
+        tracking_request = take_tracking_request(payload)
         analysis = self.publishing.analyze_deadlines(**payload)
         if analysis.get("error"):
             return analysis
-        return {
+        result = {
             "recommended_submission_order": analysis["recommended_submission_order"],
             "eligible": analysis["eligible"],
             "eligible_with_risk": analysis["eligible_with_risk"],
@@ -458,6 +464,22 @@ class ToolService:
                 for row in analysis["decisions"]
             ],
         }
+        if tracking_request is not None:
+            tracking = build_submission_tracking(
+                list(analysis["recommended_submission_order"]),
+                tracking_request,
+                self.settings,
+            )
+            result["submission_tracking"] = tracking
+            by_id = {item["target_id"]: item for item in tracking["links"]}
+            for row in result["decisions"]:
+                link = by_id.get(row["target_id"])
+                if link is None:
+                    continue
+                row["canonical_landing_page_url"] = link["canonical_landing_page_url"]
+                row["tracked_landing_page_url"] = link["tracked_landing_page_url"]
+                row["utm_parameter_preservation"] = "unknown"
+        return result
 
     def preview_submission_plan(self, **payload: Any) -> dict[str, Any]:
         payload = dict(payload)
@@ -496,6 +518,82 @@ class ToolService:
             platform_id,
             verification_authorization,
             fetcher=fetcher,
+        )
+
+    def preview_event_tracking_url(
+        self,
+        base_url: str,
+        platform: str,
+        campaign_name: str,
+        medium: str | None = None,
+        content: str | None = None,
+        conflict_policy: str | None = None,
+    ) -> dict[str, Any]:
+        """Dry-run a tracked URL. The stored canonical landing page is not modified."""
+        return preview_event_utm_url(
+            base_url,
+            platform,
+            campaign_name,
+            medium=medium or self.settings.utm_default_medium,
+            content=content or self.settings.utm_default_content,
+            conflict_policy=conflict_policy or self.settings.utm_conflict_policy,
+        )
+
+    def query_ga4_campaign_performance(
+        self,
+        campaign_name: str,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        source: str | None = None,
+        medium: str | None = None,
+        page_path: str | None = None,
+        include_conversions: bool | None = None,
+        *,
+        client: Any | None = None,
+    ) -> dict[str, Any]:
+        """Read a GA4 campaign report. Disabled by default. Never writes to GA4."""
+        return query_ga4_from_settings(
+            self.settings,
+            campaign_name,
+            start_date=start_date,
+            end_date=end_date,
+            source=source,
+            medium=medium,
+            page_path=page_path,
+            include_conversions=include_conversions,
+            client=client,
+        )
+
+    def audit_campaign_attribution(
+        self,
+        campaign_name: str,
+        source: str | None = None,
+        medium: str | None = None,
+        page_path: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        *,
+        client: Any | None = None,
+    ) -> dict[str, Any]:
+        """Compare expected tags with a read-only GA4 report. Does not verify backlinks."""
+        report = self.query_ga4_campaign_performance(
+            campaign_name,
+            start_date=start_date,
+            end_date=end_date,
+            source=source,
+            medium=medium,
+            page_path=page_path,
+            client=client,
+        )
+        filters = report.get("filters") if isinstance(report.get("filters"), dict) else {}
+        return audit_campaign_attribution(
+            {
+                "campaign_name": filters.get("sessionCampaignName") or campaign_name,
+                "source": filters.get("sessionSource"),
+                "medium": filters.get("sessionMedium"),
+                "page_path": filters.get("pagePath"),
+            },
+            report,
         )
 
     def submit_event_dry_run(self, event_id: str, platform_id: str) -> dict[str, Any]:

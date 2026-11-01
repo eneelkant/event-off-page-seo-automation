@@ -8,6 +8,7 @@
 - Never send passwords, cookies, or access tokens to AI providers.
 - Google Sheets site passwords are not returned by tools or the HTTP bridge. Prefer `env:NAME` or `secret:NAME` cells. A legacy password cell is detected and discarded.
 - Do not commit service-account JSON. `GOOGLE_SHEETS_CREDENTIALS_JSON` and `GOOGLE_APPLICATION_CREDENTIALS` stay in the secret store.
+- GA4 reporting is read-only and disabled by default. Tools do not accept credential JSON, do not return credential-file contents, and do not log private keys. A GA4 Viewer role is sufficient.
 - The Gemini routes `/api/submission-targets`, `/api/submissions`, and `/api/publication-updates` require `MCP_AUTH_TOKEN` even on localhost.
 - Eventbrite live create uses the production API host only; never log the private token.
 

@@ -98,6 +98,12 @@ The template writer uses only the fields supplied for that call. It does not add
 
 The official event name is copied into the title, body, and structured-data `name`. If the name is longer than `title_limit` (default 70), the title is kept intact, `seo_title_within_limit` is false, and the quality report says the title does not meet the limit. Meta descriptions that exceed `description_limit` (default 160) are also kept intact and warned. Required checks cover the event name, description, organizer, timezone-aware start, optional end, `http` or `https` landing and registration URLs, and either a location or virtual details.
 
+## Tracked landing URLs
+
+`recommend_submission_targets` and `preview_submission_plan` accept an optional `landing_page_url` and `campaign_name`. When both are present, each planned target gets a separate tracked URL. The canonical URL is returned beside it. The stored event row is not rewritten. `utm_source` is the normalized platform id. `utm_medium` defaults to `event_directory`, `utm_campaign` keeps the supplied campaign text, and `utm_content` defaults to `event_submission_link`. `UTM_CONFLICT_POLICY=replace` overwrites UTM keys already on the URL; `preserve` keeps the first existing value. The same inputs produce the same URL.
+
+`utm_parameter_preservation` is `unknown`. A directory may drop query parameters. The plan does not claim that tracking was retained, and it does not publish. See [UTM and GA4](TRACKING.md).
+
 ## Tools
 
 Read-only planning:
@@ -109,6 +115,9 @@ Read-only planning:
 - `analyze_event_publishing_deadlines`
 - `recommend_submission_targets`
 - `preview_submission_plan`
+- `preview_event_tracking_url`
+- `query_ga4_campaign_performance`
+- `audit_campaign_attribution`
 - `verify_publication_source`
 - `verify_pricing_source`
 

@@ -349,11 +349,17 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
         documented_business_days_by_platform: dict[str, int] | None = None,
         official_publication_windows_by_platform: dict[str, Any] | None = None,
         pricing_evidence_by_platform: dict[str, Any] | None = None,
+        landing_page_url: str | None = None,
+        campaign_name: str | None = None,
+        utm_medium: str | None = None,
+        utm_content: str | None = None,
+        utm_conflict_policy: str | None = None,
     ) -> dict[str, Any]:
         """Return the default plan. Unknown and claimed pricing, unknown timelines, and unverified citations stay excluded.
 
         Timing arguments match analyze_event_publishing_deadlines. A verified_free classification
         and caller-supplied verification metadata cannot make a target ELIGIBLE. Paid options stay excluded.
+        Optional landing_page_url and campaign_name add a dry-run tracked URL. The stored canonical URL is not changed.
         """
         return service.recommend_submission_targets(
             event_name=event_name,
@@ -367,6 +373,11 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
             documented_business_days_by_platform=documented_business_days_by_platform,
             official_publication_windows_by_platform=official_publication_windows_by_platform,
             pricing_evidence_by_platform=pricing_evidence_by_platform,
+            landing_page_url=landing_page_url,
+            campaign_name=campaign_name,
+            utm_medium=utm_medium,
+            utm_content=utm_content,
+            utm_conflict_policy=utm_conflict_policy,
         )
 
     @mcp.tool()
@@ -382,10 +393,17 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
         documented_business_days_by_platform: dict[str, int] | None = None,
         official_publication_windows_by_platform: dict[str, Any] | None = None,
         pricing_evidence_by_platform: dict[str, Any] | None = None,
+        landing_page_url: str | None = None,
+        campaign_name: str | None = None,
+        utm_medium: str | None = None,
+        utm_content: str | None = None,
+        utm_conflict_policy: str | None = None,
     ) -> dict[str, Any]:
         """Preview the same default plan as recommend_submission_targets. The preview does not publish.
 
         Unverified citations stay in manual review. This call does not fetch official pages.
+        Optional landing_page_url and campaign_name attach a tracked URL for each planned target.
+        The canonical URL stays separate, and directory UTM preservation is reported as unknown.
         """
         return service.preview_submission_plan(
             event_name=event_name,
@@ -399,6 +417,78 @@ def register_tools(mcp: MCPServer, service: ToolService) -> None:
             documented_business_days_by_platform=documented_business_days_by_platform,
             official_publication_windows_by_platform=official_publication_windows_by_platform,
             pricing_evidence_by_platform=pricing_evidence_by_platform,
+            landing_page_url=landing_page_url,
+            campaign_name=campaign_name,
+            utm_medium=utm_medium,
+            utm_content=utm_content,
+            utm_conflict_policy=utm_conflict_policy,
+        )
+
+    @mcp.tool()
+    def preview_event_tracking_url(
+        base_url: str,
+        platform: str,
+        campaign_name: str,
+        medium: str | None = None,
+        content: str | None = None,
+        conflict_policy: str | None = None,
+    ) -> dict[str, Any]:
+        """Preview one tracked landing URL. Does not store it or publish a listing."""
+        return service.preview_event_tracking_url(
+            base_url,
+            platform,
+            campaign_name,
+            medium=medium,
+            content=content,
+            conflict_policy=conflict_policy,
+        )
+
+    @mcp.tool()
+    def query_ga4_campaign_performance(
+        campaign_name: str,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        source: str | None = None,
+        medium: str | None = None,
+        page_path: str | None = None,
+        include_conversions: bool | None = None,
+    ) -> dict[str, Any]:
+        """Read GA4 campaign traffic. Disabled unless GA4_ENABLED is set. Does not change GA4.
+
+        Sessions are reported traffic. They do not verify a backlink or a live directory listing.
+        Credential file contents are not accepted and are not returned.
+        """
+        return service.query_ga4_campaign_performance(
+            campaign_name,
+            start_date=start_date,
+            end_date=end_date,
+            source=source,
+            medium=medium,
+            page_path=page_path,
+            include_conversions=include_conversions,
+        )
+
+    @mcp.tool()
+    def audit_campaign_attribution(
+        campaign_name: str,
+        source: str | None = None,
+        medium: str | None = None,
+        page_path: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> dict[str, Any]:
+        """Compare expected UTM tags with a read-only GA4 report.
+
+        Facts and inferences are separate. A session does not verify a backlink.
+        No sessions does not prove that tracking is broken. Listings and GA4 settings are not modified.
+        """
+        return service.audit_campaign_attribution(
+            campaign_name,
+            source=source,
+            medium=medium,
+            page_path=page_path,
+            start_date=start_date,
+            end_date=end_date,
         )
 
     @mcp.tool()

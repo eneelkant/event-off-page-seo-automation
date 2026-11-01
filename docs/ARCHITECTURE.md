@@ -24,8 +24,8 @@ Event Input → Validation → Platform Discovery/Eligibility
 | `orchestration/` | Capability registry + dry-run-safe orchestrator |
 | `integrations/` | Soft-fail Agno, Crawl4AI, browser-use, Skyvern |
 | `browser/` | Playwright helper with human-verification stops |
-| `tracking/` | Backlink verifier |
-| `reporting/` | JSON/CSV campaign reports |
+| `tracking/` | Backlink verifier and UTM URL builder |
+| `reporting/` | JSON/CSV campaign reports, read-only GA4 reports, attribution audit |
 | `security/` | Secret redaction + bind/auth guards |
 | `integrations/google_sheets/` | Sheets API targets, submission tracking, Gemini HTTP bridge |
 

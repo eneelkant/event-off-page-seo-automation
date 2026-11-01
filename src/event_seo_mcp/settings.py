@@ -95,6 +95,21 @@ class Settings(BaseSettings):
     google_sheets_submissions_tab: str = "Submissions"
     google_sheets_timeout_seconds: float = 20.0
 
+    # UTM tags are generated for dry-run plans. They do not replace the stored canonical URL.
+    utm_default_medium: str = "event_directory"
+    utm_default_content: str = "event_submission_link"
+    utm_conflict_policy: Literal["preserve", "replace"] = "replace"
+
+    # GA4 Data API reporting is read-only and off unless an operator enables it.
+    ga4_enabled: bool = False
+    ga4_property_id: str | None = None
+    ga4_start_date: str = "30daysAgo"
+    ga4_end_date: str = "today"
+    ga4_include_conversions: bool = False
+    ga4_page_size: int = Field(default=10000, ge=1, le=10000)
+    ga4_max_pages: int = Field(default=10, ge=1, le=20)
+    ga4_timeout_seconds: float = Field(default=30.0, ge=1, le=120)
+
     @field_validator(
         "mcp_auth_token",
         "ai_fallback_provider",
@@ -109,12 +124,20 @@ class Settings(BaseSettings):
         "google_sheets_spreadsheet_id",
         "google_sheets_credentials_json",
         "google_application_credentials",
+        "ga4_property_id",
         mode="before",
     )
     @classmethod
     def _blank_optional_string(cls, value: object) -> object:
         if isinstance(value, str) and not value.strip():
             return None
+        return value
+
+    @field_validator("utm_conflict_policy", mode="before")
+    @classmethod
+    def _utm_policy(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip().lower()
         return value
 
     @field_validator(

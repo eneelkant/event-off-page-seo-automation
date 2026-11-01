@@ -79,7 +79,11 @@ class CampaignReporter:
             "missing_or_broken_backlinks": missing,
             "referral_traffic": None,
             "registrations_conversions": None,
-            "analytics_note": "Traffic/conversion metrics are null unless connected analytics data is provided. Never fabricated.",
+            "analytics_note": (
+                "Traffic and conversion metrics stay null in this report. "
+                "Request query_ga4_campaign_performance for a read-only GA4 report. "
+                "Metrics are never fabricated. GA4 sessions do not verify backlinks."
+            ),
             "strategy_targets": STRATEGY_TARGETS,
             "dry_run_default": True,
         }

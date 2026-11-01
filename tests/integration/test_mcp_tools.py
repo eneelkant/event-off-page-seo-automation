@@ -46,6 +46,9 @@ EXPECTED_TOOLS = {
     "verify_publication_source",
     "verify_pricing_source",
     "submit_event_dry_run",
+    "preview_event_tracking_url",
+    "query_ga4_campaign_performance",
+    "audit_campaign_attribution",
 }
 
 
@@ -82,6 +85,22 @@ async def test_tools_registered(settings: Settings) -> None:
     content_schema = by_name["generate_seo_event_content"].input_schema
     content_properties = content_schema["properties"] if isinstance(content_schema, dict) else content_schema.properties
     assert "content_source" in content_properties
+    analyze_schema = by_name["analyze_event_publishing_deadlines"].input_schema
+    analyze_properties = analyze_schema["properties"] if isinstance(analyze_schema, dict) else analyze_schema.properties
+    assert "landing_page_url" not in analyze_properties
+    for name in ("recommend_submission_targets", "preview_submission_plan"):
+        schema = by_name[name].input_schema
+        properties = schema["properties"] if isinstance(schema, dict) else schema.properties
+        assert {"landing_page_url", "campaign_name"} <= set(properties)
+    forbidden = {"credentials", "google_application_credentials", "private_key", "client_secret"}
+    for name in (
+        "preview_event_tracking_url",
+        "query_ga4_campaign_performance",
+        "audit_campaign_attribution",
+    ):
+        schema = by_name[name].input_schema
+        properties = schema["properties"] if isinstance(schema, dict) else schema.properties
+        assert forbidden.isdisjoint(properties)
 
 
 @pytest.mark.asyncio
