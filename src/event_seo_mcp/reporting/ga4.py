@@ -261,6 +261,15 @@ def _validated_request(
     return token, start, end, filters, dimensions, metrics
 
 
+def ga4_property_id_valid(value: str | None) -> bool:
+    """True when the value is a numeric property id. The id itself is not returned."""
+    try:
+        _property_id(value)
+    except ValueError:
+        return False
+    return True
+
+
 def _property_id(value: str | None) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError("GA4_PROPERTY_ID is required when GA4 reporting is enabled")
@@ -317,6 +326,15 @@ def _dimension_filter(filters: dict[str, str]) -> dict[str, Any]:
     if len(expressions) == 1:
         return expressions[0]
     return {"and_group": {"expressions": expressions}}
+
+
+def ga4_client_importable() -> bool:
+    """Return whether the optional client package imports. Does not construct a client."""
+    try:
+        from google.analytics.data_v1beta import BetaAnalyticsDataClient
+    except ImportError:
+        return False
+    return BetaAnalyticsDataClient is not None
 
 
 def _default_client() -> Any:
